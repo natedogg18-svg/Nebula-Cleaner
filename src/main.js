@@ -5,7 +5,16 @@ const crypto = require('crypto');
 const os = require('os');
 
 let mainWindow;
-const RECYCLE_BIN_DIR = path.join(app.getPath('userData'), 'RecycleBin');
+const RECYCLE_BIN_BASE = path.join(app.getPath('userData'), 'RecycleBin');
+const META_FILE = path.join(RECYCLE_BIN_BASE, 'meta.json');
+
+function getBinDirForDrive(filePath) {
+  // Put bin folder on same drive as the file so rename is instant
+  const root = path.parse(filePath).root; // e.g. "E:\"
+  const binDir = path.join(root, '.nebula-bin');
+  if (!fs.existsSync(binDir)) fs.mkdirSync(binDir, { recursive: true });
+  return binDir;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -27,7 +36,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  if (!fs.existsSync(RECYCLE_BIN_DIR)) fs.mkdirSync(RECYCLE_BIN_DIR, { recursive: true });
+  if (!fs.existsSync(RECYCLE_BIN_BASE)) fs.mkdirSync(RECYCLE_BIN_BASE, { recursive: true });
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
@@ -214,61 +223,60 @@ ipcMain.handle('scan-junk', async (_, dir) => {
 // Move to recycle bin
 ipcMain.handle('move-to-bin', async (_, filePaths) => {
   const results = [];
-  const metaFile = path.join(RECYCLE_BIN_DIR, 'meta.json');
   let meta = [];
-  try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch {}
+  try { meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch {}
 
   for (let i = 0; i < filePaths.length; i++) {
     const filePath = filePaths[i];
     try {
       const stat = fs.statSync(filePath);
       const id = `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
-      const dest = path.join(RECYCLE_BIN_DIR, id);
-      moveFile(filePath, dest);
-      meta.push({ id, originalPath: filePath, name: path.basename(filePath), size: stat.size, sizeFormatted: formatBytes(stat.size), deletedAt: new Date().toISOString() });
+      // Store on same drive for instant rename — no cross-drive copy needed
+      const binDir = getBinDirForDrive(filePath);
+      const dest = path.join(binDir, id);
+      fs.renameSync(filePath, dest);
+      meta.push({ id, binDir, originalPath: filePath, name: path.basename(filePath), size: stat.size, sizeFormatted: formatBytes(stat.size), deletedAt: new Date().toISOString() });
       results.push({ success: true, path: filePath });
     } catch (e) {
       console.error('move-to-bin failed:', filePath, e.code, e.message);
       results.push({ success: false, path: filePath, error: `[${e.code}] ${e.message}` });
     }
   }
-  fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
+  fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2));
   return results;
 });
 
 // Get recycle bin contents
 ipcMain.handle('get-bin', async () => {
-  const metaFile = path.join(RECYCLE_BIN_DIR, 'meta.json');
-  try { return JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch { return []; }
+  try { return JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch { return []; }
 });
 
 // Restore from bin
 ipcMain.handle('restore-from-bin', async (_, id) => {
-  const metaFile = path.join(RECYCLE_BIN_DIR, 'meta.json');
   let meta = [];
-  try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch { return { success: false }; }
+  try { meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch { return { success: false }; }
   const item = meta.find(m => m.id === id);
   if (!item) return { success: false, error: 'Item not found' };
-  const src = path.join(RECYCLE_BIN_DIR, id);
+  const src = path.join(item.binDir || RECYCLE_BIN_BASE, id);
   try {
     const destDir = path.dirname(item.originalPath);
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-    moveFile(src, item.originalPath);
-    fs.writeFileSync(metaFile, JSON.stringify(meta.filter(m => m.id !== id), null, 2));
+    fs.renameSync(src, item.originalPath);
+    fs.writeFileSync(META_FILE, JSON.stringify(meta.filter(m => m.id !== id), null, 2));
     return { success: true };
   } catch (e) { return { success: false, error: e.message }; }
 });
 
 // Permanently delete from bin
 ipcMain.handle('delete-from-bin', async (_, ids) => {
-  const metaFile = path.join(RECYCLE_BIN_DIR, 'meta.json');
   let meta = [];
-  try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch {}
+  try { meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch {}
   for (const id of ids) {
-    const src = path.join(RECYCLE_BIN_DIR, id);
+    const item = meta.find(m => m.id === id);
+    const src = path.join(item?.binDir || RECYCLE_BIN_BASE, id);
     try { fs.unlinkSync(src); } catch {}
   }
-  fs.writeFileSync(metaFile, JSON.stringify(meta.filter(m => !ids.includes(m.id)), null, 2));
+  fs.writeFileSync(META_FILE, JSON.stringify(meta.filter(m => !ids.includes(m.id)), null, 2));
   return { success: true };
 });
 
