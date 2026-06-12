@@ -91,9 +91,9 @@ function walkDir(dir, files = []) {
   return files;
 }
 
-// Throttled copy — 50 MB/s max to avoid freezing other apps
-const COPY_CHUNK = 256 * 1024; // 256 KB chunks
-const COPY_DELAY = 5;          // ms pause between chunks
+// Throttled copy — gentle pace to keep system responsive
+const COPY_CHUNK = 64 * 1024; // 64 KB chunks
+const COPY_DELAY = 20;         // 20ms pause between chunks (~3 MB/s max)
 
 async function throttledCopy(src, dest) {
   const fdr = fs.openSync(src, 'r');
