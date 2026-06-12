@@ -82,14 +82,16 @@ function isJunk(filename) {
   return JUNK_PATTERNS.some(p => p.test(filename));
 }
 
-function walkDir(dir, files = []) {
+async function walkDir(dir, files = [], depth = 0) {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return files; }
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
-      walkDir(full, files);
+      // Yield to event loop every directory to keep UI responsive
+      await new Promise(r => setImmediate(r));
+      await walkDir(full, files, depth + 1);
     } else if (entry.isFile()) {
       try {
         const stat = fs.statSync(full);
@@ -121,22 +123,14 @@ async function throttledCopy(src, dest) {
 }
 
 async function moveFile(src, dest) {
-  console.log(`moveFile: ${src} -> ${dest}`);
   try {
     fs.renameSync(src, dest);
-    console.log(`moveFile: renameSync succeeded`);
-    if (fs.existsSync(src)) console.error(`moveFile: original still exists after rename!`);
   } catch (e) {
-    console.log(`moveFile: renameSync failed [${e.code}], trying throttledCopy`);
     if (e.code === 'EXDEV') {
       await throttledCopy(src, dest);
-      console.log(`moveFile: copy done, now deleting src`);
       try {
         fs.unlinkSync(src);
-        console.log(`moveFile: unlink succeeded`);
-        if (fs.existsSync(src)) console.error(`moveFile: original still exists after unlink!`);
       } catch (unlinkErr) {
-        console.error(`moveFile: unlink failed [${unlinkErr.code}] ${unlinkErr.message}`);
         try { fs.unlinkSync(dest); } catch {}
         throw new Error(`Copied but could not delete original: [${unlinkErr.code}] ${unlinkErr.message}`);
       }
@@ -160,7 +154,7 @@ function baseName(name) {
 
 // Scan for duplicates (exact hash matches + similar name groups)
 ipcMain.handle('scan-duplicates', async (_, dir) => {
-  const files = walkDir(dir);
+  const files = await walkDir(dir);
   const groups = [];
 
   // 1. Exact duplicates — same size + same MD5
@@ -209,14 +203,14 @@ ipcMain.handle('scan-duplicates', async (_, dir) => {
 // Scan for large files
 ipcMain.handle('scan-large-files', async (_, dir, minSizeMB = 50) => {
   const minBytes = minSizeMB * 1024 * 1024;
-  const files = walkDir(dir).filter(f => f.size >= minBytes);
+  const files = (await walkDir(dir)).filter(f => f.size >= minBytes);
   files.sort((a, b) => b.size - a.size);
   return files.slice(0, 100).map(f => ({ ...f, sizeFormatted: formatBytes(f.size) }));
 });
 
 // Scan for junk files
 ipcMain.handle('scan-junk', async (_, dir) => {
-  const files = walkDir(dir).filter(f => isJunk(f.name));
+  const files = (await walkDir(dir)).filter(f => isJunk(f.name));
   return files.map(f => ({ ...f, sizeFormatted: formatBytes(f.size) }));
 });
 
