@@ -201,7 +201,8 @@ function selectAllDuplicates() {
   document.querySelectorAll('#duplicate-list input[type=checkbox]').forEach(c => {
     const item = c.closest('.file-item');
     const badge = item.querySelector('.file-badge');
-    if (badge && badge.classList.contains('badge-dupe')) c.checked = true;
+    // Select everything that isn't marked Original
+    if (!badge || !badge.classList.contains('badge-original')) c.checked = true;
   });
 }
 
