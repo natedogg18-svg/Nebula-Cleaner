@@ -130,17 +130,32 @@ async function moveFile(src, dest) {
   }
 }
 
-// Scan for duplicates
+// Strip trailing number/copy suffix: "file (2).jpg" -> "file.jpg", "file - Copy.jpg" -> "file.jpg"
+function baseName(name) {
+  const ext = path.extname(name);
+  const stem = path.basename(name, ext);
+  return stem
+    .replace(/\s*\(\d+\)\s*$/, '')
+    .replace(/\s*-\s*copy(\s*\(\d+\))?\s*$/i, '')
+    .replace(/\s*\d+$/, '')
+    .trim()
+    .toLowerCase() + ext.toLowerCase();
+}
+
+// Scan for duplicates (exact hash matches + similar name groups)
 ipcMain.handle('scan-duplicates', async (_, dir) => {
   const files = walkDir(dir);
+  const groups = [];
+
+  // 1. Exact duplicates — same size + same MD5
   const bySize = {};
   for (const f of files) {
     if (!bySize[f.size]) bySize[f.size] = [];
     bySize[f.size].push(f);
   }
-  const candidates = Object.values(bySize).filter(g => g.length > 1);
-  const groups = [];
-  for (const group of candidates) {
+  const exactCandidates = Object.values(bySize).filter(g => g.length > 1);
+  const exactPaths = new Set();
+  for (const group of exactCandidates) {
     const hashes = {};
     for (const f of group) {
       try {
@@ -150,9 +165,28 @@ ipcMain.handle('scan-duplicates', async (_, dir) => {
       } catch {}
     }
     for (const dupes of Object.values(hashes)) {
-      if (dupes.length > 1) groups.push(dupes.map(f => ({ ...f, size: f.size, sizeFormatted: formatBytes(f.size) })));
+      if (dupes.length > 1) {
+        groups.push(dupes.map(f => ({ ...f, sizeFormatted: formatBytes(f.size), matchType: 'exact' })));
+        dupes.forEach(f => exactPaths.add(f.path));
+      }
     }
   }
+
+  // 2. Similar name groups — same base name pattern, same extension, same parent folder
+  const byBaseName = {};
+  for (const f of files) {
+    if (exactPaths.has(f.path)) continue;
+    const key = path.dirname(f.path) + '|' + baseName(f.name);
+    if (!byBaseName[key]) byBaseName[key] = [];
+    byBaseName[key].push(f);
+  }
+  for (const group of Object.values(byBaseName)) {
+    if (group.length > 1) {
+      group.sort((a, b) => a.name.localeCompare(b.name));
+      groups.push(group.map(f => ({ ...f, sizeFormatted: formatBytes(f.size), matchType: 'similar' })));
+    }
+  }
+
   return groups;
 });
 

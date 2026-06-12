@@ -118,7 +118,8 @@ function emptyState(icon, msg) {
 }
 
 function fileItem(file, checked = false, badge = '') {
-  const badgeHtml = badge ? `<span class="file-badge ${badge === 'Original' ? 'badge-original' : 'badge-dupe'}">${badge}</span>` : '';
+  const badgeClass = badge === 'Original' ? 'badge-original' : badge === 'Similar' ? 'badge-similar' : 'badge-dupe';
+  const badgeHtml = badge ? `<span class="file-badge ${badgeClass}">${badge}</span>` : '';
   return `
     <div class="file-item">
       <input type="checkbox" ${checked ? 'checked' : ''} data-path="${escHtml(file.path)}" />
@@ -143,8 +144,11 @@ function renderDuplicates() {
   state.duplicates.forEach((group, gi) => {
     const waste = group[0].size * (group.length - 1);
     totalWaste += waste;
-    html += `<div class="dup-group"><div class="dup-group-header">Group ${gi+1} — ${group.length} identical files (${group[0].sizeFormatted} each)</div>`;
-    group.forEach((f, i) => { html += fileItem(f, i > 0, i === 0 ? 'Original' : 'Duplicate'); });
+    const isExact = group[0].matchType === 'exact';
+    const label = isExact ? `${group.length} identical files (${group[0].sizeFormatted} each)` : `${group.length} similar files — review before deleting`;
+    const icon = isExact ? '🔴 Exact Duplicates' : '🟡 Similar Names';
+    html += `<div class="dup-group"><div class="dup-group-header">${icon} · Group ${gi+1} — ${label}</div>`;
+    group.forEach((f, i) => { html += fileItem(f, isExact && i > 0, i === 0 ? 'Original' : isExact ? 'Duplicate' : 'Similar'); });
     html += '</div>';
   });
   list.innerHTML = html;

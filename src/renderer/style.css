@@ -262,6 +262,7 @@ body {
 .file-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
 .badge-original { background: rgba(16,185,129,0.2); color: var(--success); }
 .badge-dupe { background: rgba(239,68,68,0.2); color: var(--danger); }
+.badge-similar { background: rgba(251,191,36,0.2); color: #fbbf24; }
 .badge-date { font-size: 11px; color: var(--text3); flex-shrink: 0; min-width: 120px; text-align: right; }
 
 /* Toast */
