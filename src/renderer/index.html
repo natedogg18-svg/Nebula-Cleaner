@@ -40,6 +40,9 @@
         <div class="nav-item" data-tab="junk" onclick="switchTab('junk')">
           <span class="nav-icon">🗑️</span> Junk Files
         </div>
+        <div class="nav-item" data-tab="analyzer" onclick="switchTab('analyzer')">
+          <span class="nav-icon">📊</span> Space Analyzer
+        </div>
         <div class="nav-item" data-tab="bin" onclick="switchTab('bin')">
           <span class="nav-icon">♻️</span> Recycle Bin
         </div>
@@ -138,6 +141,21 @@
           <span class="item-count" id="junk-count"></span>
         </div>
         <div class="file-list" id="junk-list"></div>
+      </div>
+
+      <!-- Recycle Bin -->
+      <div class="tab-panel" id="tab-bin">
+      <!-- Space Analyzer -->
+      <div class="tab-panel" id="tab-analyzer">
+        <div class="panel-header">
+          <h1 class="panel-title">📊 Space Analyzer</h1>
+          <p class="panel-subtitle">See what's hogging space — scans everything including system folders</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-sm btn-primary" onclick="runAnalyzer()">🔍 Analyze Drive</button>
+          <span class="item-count" id="analyzer-count"></span>
+        </div>
+        <div class="analyzer-bars" id="analyzer-bars"></div>
       </div>
 
       <!-- Recycle Bin -->

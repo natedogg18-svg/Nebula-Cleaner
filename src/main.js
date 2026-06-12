@@ -311,6 +311,39 @@ ipcMain.handle('delete-from-bin', async (_, ids) => {
   return { success: true };
 });
 
+// Space analyzer — top folders by size (includes system folders, read-only)
+ipcMain.handle('analyze-space', async (_, dir) => {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  const results = [];
+  for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      let size = 0;
+      const countSize = (d) => {
+        let ents;
+        try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+        for (const e of ents) {
+          if (e.isSymbolicLink()) continue;
+          const p = path.join(d, e.name);
+          if (e.isDirectory()) countSize(p);
+          else { try { size += fs.statSync(p).size; } catch {} }
+        }
+      };
+      countSize(full);
+      results.push({ name: entry.name, path: full, size, sizeFormatted: formatBytes(size), type: 'folder' });
+    } else {
+      try {
+        const stat = fs.statSync(full);
+        results.push({ name: entry.name, path: full, size: stat.size, sizeFormatted: formatBytes(stat.size), type: 'file' });
+      } catch {}
+    }
+  }
+  results.sort((a, b) => b.size - a.size);
+  return results.slice(0, 30);
+});
+
 // Get disk info
 ipcMain.handle('get-disk-info', async () => {
   return { totalMem: os.totalmem(), freeMem: os.freemem(), homedir: os.homedir(), platform: process.platform };

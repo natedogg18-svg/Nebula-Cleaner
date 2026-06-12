@@ -258,6 +258,35 @@ async function deleteSelected() {
   await loadBin();
 }
 
+// Space Analyzer
+async function runAnalyzer() {
+  const dir = state.dir || 'C:\\';
+  document.getElementById('analyzer-count').textContent = 'Analyzing...';
+  document.getElementById('analyzer-bars').innerHTML = '<div class="empty-state"><span class="spinner"></span> Calculating folder sizes...</div>';
+  const results = await window.nebula.analyzeSpace(dir);
+  renderAnalyzer(results, dir);
+}
+
+function renderAnalyzer(results, dir) {
+  const container = document.getElementById('analyzer-bars');
+  if (!results.length) { container.innerHTML = emptyState('📊', 'Nothing found'); return; }
+  const max = results[0].size;
+  document.getElementById('analyzer-count').textContent = `Top ${results.length} items in ${dir}`;
+  container.innerHTML = results.map(item => {
+    const pct = max > 0 ? Math.round((item.size / max) * 100) : 0;
+    const icon = item.type === 'folder' ? '📁' : '📄';
+    return `
+      <div class="analyzer-row">
+        <div class="analyzer-icon">${icon}</div>
+        <div class="analyzer-info">
+          <div class="analyzer-name">${escHtml(item.name)}</div>
+          <div class="analyzer-bar-wrap"><div class="analyzer-bar" style="width:${pct}%"></div></div>
+        </div>
+        <div class="analyzer-size">${item.sizeFormatted}</div>
+      </div>`;
+  }).join('');
+}
+
 // Drive selector
 async function loadDrives() {
   const drives = await window.nebula.getDrives();

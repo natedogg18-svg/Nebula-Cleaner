@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('nebula', {
   deleteFromBin: (ids) => ipcRenderer.invoke('delete-from-bin', ids),
   getDiskInfo: () => ipcRenderer.invoke('get-disk-info'),
   getDrives: () => ipcRenderer.invoke('get-drives'),
+  analyzeSpace: (dir) => ipcRenderer.invoke('analyze-space', dir),
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
