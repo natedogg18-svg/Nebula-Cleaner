@@ -210,8 +210,10 @@ async function sendSelectedToBin(type) {
   const results = await window.nebula.moveToBin(paths);
   const ok = results.filter(r => r.success).length;
   const fail = results.length - ok;
-  showToast(`Moved ${ok} file(s) to bin${fail ? ` (${fail} failed)` : ''}`, ok > 0 ? 'success' : 'error');
-  await runScan(type === 'duplicates' ? 'duplicates' : type, true);
+  const firstErr = results.find(r => !r.success);
+  const errDetail = firstErr ? `: ${firstErr.error}` : '';
+  showToast(`Moved ${ok} file(s) to bin${fail ? ` (${fail} failed${errDetail})` : ''}`, ok > 0 ? 'success' : 'error');
+  await runScan(type, true);
 }
 
 // Restore

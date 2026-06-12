@@ -84,11 +84,25 @@ function walkDir(dir, files = []) {
     } else if (entry.isFile()) {
       try {
         const stat = fs.statSync(full);
-        files.push({ path: full, name: entry.name, size: stat.size, mtime: stat.mtime });
+        files.push({ path: full, name: entry.name, size: stat.size, mtime: stat.mtime.toISOString() });
       } catch {}
     }
   }
   return files;
+}
+
+function moveFile(src, dest) {
+  try {
+    fs.renameSync(src, dest);
+  } catch (e) {
+    if (e.code === 'EXDEV') {
+      // Cross-device move (different drives) — copy then delete
+      fs.copyFileSync(src, dest);
+      fs.unlinkSync(src);
+    } else {
+      throw e;
+    }
+  }
 }
 
 // Scan for duplicates
@@ -138,12 +152,13 @@ ipcMain.handle('move-to-bin', async (_, filePaths) => {
   let meta = [];
   try { meta = JSON.parse(fs.readFileSync(metaFile, 'utf8')); } catch {}
 
-  for (const filePath of filePaths) {
+  for (let i = 0; i < filePaths.length; i++) {
+    const filePath = filePaths[i];
     try {
       const stat = fs.statSync(filePath);
-      const id = Date.now() + '_' + Math.random().toString(36).slice(2);
+      const id = `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
       const dest = path.join(RECYCLE_BIN_DIR, id);
-      fs.renameSync(filePath, dest);
+      moveFile(filePath, dest);
       meta.push({ id, originalPath: filePath, name: path.basename(filePath), size: stat.size, sizeFormatted: formatBytes(stat.size), deletedAt: new Date().toISOString() });
       results.push({ success: true, path: filePath });
     } catch (e) {
@@ -171,7 +186,7 @@ ipcMain.handle('restore-from-bin', async (_, id) => {
   try {
     const destDir = path.dirname(item.originalPath);
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
-    fs.renameSync(src, item.originalPath);
+    moveFile(src, item.originalPath);
     fs.writeFileSync(metaFile, JSON.stringify(meta.filter(m => m.id !== id), null, 2));
     return { success: true };
   } catch (e) { return { success: false, error: e.message }; }
