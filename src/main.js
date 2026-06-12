@@ -112,15 +112,22 @@ async function throttledCopy(src, dest) {
 }
 
 async function moveFile(src, dest) {
+  console.log(`moveFile: ${src} -> ${dest}`);
   try {
     fs.renameSync(src, dest);
+    console.log(`moveFile: renameSync succeeded`);
+    if (fs.existsSync(src)) console.error(`moveFile: original still exists after rename!`);
   } catch (e) {
+    console.log(`moveFile: renameSync failed [${e.code}], trying throttledCopy`);
     if (e.code === 'EXDEV') {
       await throttledCopy(src, dest);
+      console.log(`moveFile: copy done, now deleting src`);
       try {
         fs.unlinkSync(src);
+        console.log(`moveFile: unlink succeeded`);
+        if (fs.existsSync(src)) console.error(`moveFile: original still exists after unlink!`);
       } catch (unlinkErr) {
-        // Delete the partial copy in bin so we don't have orphans
+        console.error(`moveFile: unlink failed [${unlinkErr.code}] ${unlinkErr.message}`);
         try { fs.unlinkSync(dest); } catch {}
         throw new Error(`Copied but could not delete original: [${unlinkErr.code}] ${unlinkErr.message}`);
       }
