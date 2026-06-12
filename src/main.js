@@ -82,19 +82,34 @@ function isJunk(filename) {
   return JUNK_PATTERNS.some(p => p.test(filename));
 }
 
-const EXCLUDED_DIRS = new Set([
-  RECYCLE_BIN_BASE.toLowerCase(),
-  // Also exclude per-drive bin folders
+// Folders never scanned — system critical or app internals
+const EXCLUDED_DIR_NAMES = new Set([
+  // Windows system
+  'windows', 'system32', 'syswow64', 'winsxs', 'boot', 'recovery',
+  'system volume information', '$recycle.bin', '$windows.~bt', '$windows.~ws',
+  'programdata', 'program files', 'program files (x86)',
+  // App data / runtime
+  'appdata', 'application data', 'node_modules', '.git',
+  // Nebula internal
+  '.nebula-bin',
+]);
+
+// File extensions that are never safe to delete
+const PROTECTED_EXTENSIONS = new Set([
+  '.exe', '.dll', '.sys', '.msi', '.inf', '.cat', '.drv',
+  '.ocx', '.scr', '.com', '.bat', '.cmd', '.ps1',
+  '.reg', '.lnk', '.url', '.pif',
 ]);
 
 function isExcluded(fullPath) {
-  const p = fullPath.toLowerCase();
-  if (p === RECYCLE_BIN_BASE.toLowerCase()) return true;
-  // Exclude .nebula-bin folders on any drive
-  if (path.basename(fullPath).toLowerCase() === '.nebula-bin') return true;
-  // Skip common system dirs that waste time
+  if (fullPath.toLowerCase().startsWith(RECYCLE_BIN_BASE.toLowerCase())) return true;
   const name = path.basename(fullPath).toLowerCase();
-  return ['$recycle.bin', 'system volume information', 'windows', 'pagefile.sys', 'node_modules', '.git'].includes(name);
+  return EXCLUDED_DIR_NAMES.has(name);
+}
+
+function isSafeToShow(file) {
+  const ext = path.extname(file.name).toLowerCase();
+  return !PROTECTED_EXTENSIONS.has(ext);
 }
 
 async function walkDir(dir, files = [], depth = 0) {
@@ -170,7 +185,7 @@ function baseName(name) {
 
 // Scan for duplicates (exact hash matches + similar name groups)
 ipcMain.handle('scan-duplicates', async (_, dir) => {
-  const files = await walkDir(dir);
+  const files = (await walkDir(dir)).filter(isSafeToShow);
   const groups = [];
 
   // 1. Exact duplicates — same size + same MD5
@@ -219,14 +234,14 @@ ipcMain.handle('scan-duplicates', async (_, dir) => {
 // Scan for large files
 ipcMain.handle('scan-large-files', async (_, dir, minSizeMB = 50) => {
   const minBytes = minSizeMB * 1024 * 1024;
-  const files = (await walkDir(dir)).filter(f => f.size >= minBytes);
+  const files = (await walkDir(dir)).filter(f => f.size >= minBytes && isSafeToShow(f));
   files.sort((a, b) => b.size - a.size);
   return files.slice(0, 100).map(f => ({ ...f, sizeFormatted: formatBytes(f.size) }));
 });
 
 // Scan for junk files
 ipcMain.handle('scan-junk', async (_, dir) => {
-  const files = (await walkDir(dir)).filter(f => isJunk(f.name));
+  const files = (await walkDir(dir)).filter(f => isJunk(f.name) && isSafeToShow(f));
   return files.map(f => ({ ...f, sizeFormatted: formatBytes(f.size) }));
 });
 
