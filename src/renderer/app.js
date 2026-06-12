@@ -26,6 +26,7 @@ function switchTab(tab) {
   document.getElementById(`tab-${tab}`).classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
   if (tab === 'bin') loadBin();
+  if (tab === 'analyzer') runAnalyzer();
 }
 
 // Toast
@@ -260,7 +261,8 @@ async function deleteSelected() {
 
 // Space Analyzer
 async function runAnalyzer() {
-  const dir = state.dir || 'C:\\';
+  const dir = state.dir || 'C:\\'
+  if (!dir) { showToast('Select a drive first', 'error'); return; }
   document.getElementById('analyzer-count').textContent = 'Analyzing...';
   document.getElementById('analyzer-bars').innerHTML = '<div class="empty-state"><span class="spinner"></span> Calculating folder sizes...</div>';
   const results = await window.nebula.analyzeSpace(dir);

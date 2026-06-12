@@ -88,13 +88,21 @@ const EXCLUDED_DIR_NAMES = new Set([
   'windows', 'system32', 'syswow64', 'winsxs', 'boot', 'recovery',
   'system volume information', '$recycle.bin', '$windows.~bt', '$windows.~ws',
   'programdata', 'program files', 'program files (x86)',
+  // Adobe / app temp
+  'adobetemp', 'adobe temp', 'temp', 'tmp',
   // App data / runtime
   'appdata', 'application data', 'node_modules', '.git',
   // Nebula internal
   '.nebula-bin',
 ]);
 
-// File extensions that are never safe to delete
+// Paths at root of C:\ that Windows locks — never touch these
+const PROTECTED_ROOT_FILES = new Set([
+  'csb.log', 'dumpstack.log', 'dumpstack.log.tmp', 'install.log',
+  'hiberfil.sys', 'pagefile.sys', 'swapfile.sys',
+]);
+
+// File extensions never safe to delete
 const PROTECTED_EXTENSIONS = new Set([
   '.exe', '.dll', '.sys', '.msi', '.inf', '.cat', '.drv',
   '.ocx', '.scr', '.com', '.bat', '.cmd', '.ps1',
@@ -109,7 +117,18 @@ function isExcluded(fullPath) {
 
 function isSafeToShow(file) {
   const ext = path.extname(file.name).toLowerCase();
-  return !PROTECTED_EXTENSIONS.has(ext);
+  if (PROTECTED_EXTENSIONS.has(ext)) return false;
+  // Block .bak of executables (e.g. Adobe Crash Processor.exe.bak)
+  if (file.name.toLowerCase().match(/\.(exe|dll|sys)\.bak$/i)) return false;
+  // Block locked root-level Windows files
+  const root = path.parse(file.path).root;
+  const dir = path.dirname(file.path);
+  if (dir.toLowerCase() === root.toLowerCase().replace(/\\$/, '') &&
+      PROTECTED_ROOT_FILES.has(file.name.toLowerCase())) return false;
+  // Block files directly in C:\ root that start with known patterns
+  if (dir.toLowerCase() === root.toLowerCase().replace(/\\$/, '') &&
+      file.name.match(/^(DUMP|WRP|hiberfil|pagefile|swapfile)/i)) return false;
+  return true;
 }
 
 async function walkDir(dir, files = [], depth = 0) {
@@ -311,7 +330,26 @@ ipcMain.handle('delete-from-bin', async (_, ids) => {
   return { success: true };
 });
 
-// Space analyzer — top folders by size (includes system folders, read-only)
+// Space analyzer — top folders by size, async to keep UI responsive
+async function getDirSize(dir, depth = 0) {
+  let size = 0;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
+  for (const e of entries) {
+    if (e.isSymbolicLink()) continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      if (depth < 4) {
+        await new Promise(r => setImmediate(r));
+        size += await getDirSize(full, depth + 1);
+      }
+    } else {
+      try { size += fs.statSync(full).size; } catch {}
+    }
+  }
+  return size;
+}
+
 ipcMain.handle('analyze-space', async (_, dir) => {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
@@ -320,18 +358,7 @@ ipcMain.handle('analyze-space', async (_, dir) => {
     if (entry.isSymbolicLink()) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      let size = 0;
-      const countSize = (d) => {
-        let ents;
-        try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
-        for (const e of ents) {
-          if (e.isSymbolicLink()) continue;
-          const p = path.join(d, e.name);
-          if (e.isDirectory()) countSize(p);
-          else { try { size += fs.statSync(p).size; } catch {} }
-        }
-      };
-      countSize(full);
+      const size = await getDirSize(full);
       results.push({ name: entry.name, path: full, size, sizeFormatted: formatBytes(size), type: 'folder' });
     } else {
       try {
