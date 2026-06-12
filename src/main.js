@@ -91,13 +91,20 @@ function walkDir(dir, files = []) {
   return files;
 }
 
-function moveFile(src, dest) {
+async function moveFile(src, dest) {
   try {
     fs.renameSync(src, dest);
   } catch (e) {
     if (e.code === 'EXDEV') {
-      // Cross-device move (different drives) — copy then delete
-      fs.copyFileSync(src, dest);
+      // Cross-device move — stream copy to avoid blocking UI
+      await new Promise((resolve, reject) => {
+        const rd = fs.createReadStream(src);
+        const wr = fs.createWriteStream(dest);
+        rd.on('error', reject);
+        wr.on('error', reject);
+        wr.on('finish', resolve);
+        rd.pipe(wr);
+      });
       fs.unlinkSync(src);
     } else {
       throw e;

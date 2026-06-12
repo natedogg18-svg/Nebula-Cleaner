@@ -207,6 +207,7 @@ async function sendSelectedToBin(type) {
   const checked = [...document.querySelectorAll(`#${listId} input[type=checkbox]:checked`)];
   if (!checked.length) { showToast('No files selected', 'error'); return; }
   const paths = checked.map(c => c.dataset.path);
+  showToast(`⏳ Moving ${paths.length} file(s) to bin... please wait`);
   const results = await window.nebula.moveToBin(paths);
   const ok = results.filter(r => r.success).length;
   const fail = results.length - ok;
