@@ -215,7 +215,19 @@ async function sendSelectedToBin(type) {
   const errDetail = firstErr ? ` — ${firstErr.error}` : '';
   console.error('Bin results:', results.filter(r => !r.success));
   showToast(`Moved ${ok} file(s) to bin${fail ? ` (${fail} failed${errDetail})` : ''}`, ok > 0 ? 'success' : 'error');
-  await runScan(type, true);
+
+  // Remove successfully moved files from state and re-render without rescanning
+  const movedPaths = new Set(results.filter(r => r.success).map(r => r.path));
+  if (type === 'duplicates') {
+    state.duplicates = state.duplicates.map(g => g.filter(f => !movedPaths.has(f.path))).filter(g => g.length > 1);
+    renderDuplicates();
+  } else if (type === 'large') {
+    state.largeFiles = state.largeFiles.filter(f => !movedPaths.has(f.path));
+    renderLargeFiles();
+  } else if (type === 'junk') {
+    state.junkFiles = state.junkFiles.filter(f => !movedPaths.has(f.path));
+    renderJunkFiles();
+  }
 }
 
 // Restore
