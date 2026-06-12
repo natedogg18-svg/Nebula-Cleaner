@@ -211,7 +211,8 @@ async function sendSelectedToBin(type) {
   const ok = results.filter(r => r.success).length;
   const fail = results.length - ok;
   const firstErr = results.find(r => !r.success);
-  const errDetail = firstErr ? `: ${firstErr.error}` : '';
+  const errDetail = firstErr ? ` — ${firstErr.error}` : '';
+  console.error('Bin results:', results.filter(r => !r.success));
   showToast(`Moved ${ok} file(s) to bin${fail ? ` (${fail} failed${errDetail})` : ''}`, ok > 0 ? 'success' : 'error');
   await runScan(type, true);
 }

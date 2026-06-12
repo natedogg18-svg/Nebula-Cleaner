@@ -162,7 +162,8 @@ ipcMain.handle('move-to-bin', async (_, filePaths) => {
       meta.push({ id, originalPath: filePath, name: path.basename(filePath), size: stat.size, sizeFormatted: formatBytes(stat.size), deletedAt: new Date().toISOString() });
       results.push({ success: true, path: filePath });
     } catch (e) {
-      results.push({ success: false, path: filePath, error: e.message });
+      console.error('move-to-bin failed:', filePath, e.code, e.message);
+      results.push({ success: false, path: filePath, error: `[${e.code}] ${e.message}` });
     }
   }
   fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2));
