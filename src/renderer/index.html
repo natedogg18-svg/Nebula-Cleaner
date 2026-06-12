@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nebula Cleaner</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Stars background -->
+  <div class="stars" id="stars"></div>
+
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <span class="app-icon">🌌</span>
+      <span class="app-name">Nebula Cleaner</span>
+    </div>
+    <div class="titlebar-controls">
+      <button class="ctrl-btn minimize" onclick="window.nebula.minimize()" title="Minimize">−</button>
+      <button class="ctrl-btn maximize" onclick="window.nebula.maximize()" title="Maximize">□</button>
+      <button class="ctrl-btn close" onclick="window.nebula.close()" title="Close">×</button>
+    </div>
+  </div>
+
+  <!-- Main layout -->
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="nav-section">
+        <div class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+          <span class="nav-icon">🚀</span> Dashboard
+        </div>
+        <div class="nav-item" data-tab="duplicates" onclick="switchTab('duplicates')">
+          <span class="nav-icon">👯</span> Duplicates
+        </div>
+        <div class="nav-item" data-tab="large" onclick="switchTab('large')">
+          <span class="nav-icon">🌍</span> Large Files
+        </div>
+        <div class="nav-item" data-tab="junk" onclick="switchTab('junk')">
+          <span class="nav-icon">🗑️</span> Junk Files
+        </div>
+        <div class="nav-item" data-tab="bin" onclick="switchTab('bin')">
+          <span class="nav-icon">♻️</span> Recycle Bin
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="disk-info" id="disk-info">Loading...</div>
+      </div>
+    </nav>
+
+    <!-- Content -->
+    <main class="content">
+      <!-- Dashboard -->
+      <div class="tab-panel active" id="tab-dashboard">
+        <div class="panel-header">
+          <h1 class="panel-title">🌌 Mission Control</h1>
+          <p class="panel-subtitle">Select a directory to begin your deep space scan</p>
+        </div>
+
+        <div class="dir-picker">
+          <input type="text" id="dir-input" placeholder="Select or type a directory path..." readonly />
+          <button class="btn btn-primary" onclick="pickDirectory()">📂 Browse</button>
+        </div>
+
+        <div class="scan-cards">
+          <div class="scan-card" onclick="runScan('duplicates')">
+            <div class="card-icon">👯</div>
+            <div class="card-title">Duplicate Files</div>
+            <div class="card-desc">Find identical files wasting space</div>
+            <div class="card-result" id="result-duplicates">—</div>
+          </div>
+          <div class="scan-card" onclick="runScan('large')">
+            <div class="card-icon">🌍</div>
+            <div class="card-title">Large Files</div>
+            <div class="card-desc">Files over 50 MB consuming space</div>
+            <div class="card-result" id="result-large">—</div>
+          </div>
+          <div class="scan-card" onclick="runScan('junk')">
+            <div class="card-icon">🗑️</div>
+            <div class="card-title">Junk Files</div>
+            <div class="card-desc">Temp, cache, and log files</div>
+            <div class="card-result" id="result-junk">—</div>
+          </div>
+        </div>
+
+        <button class="btn btn-launch" id="scan-all-btn" onclick="runAllScans()">
+          🚀 Launch Full Scan
+        </button>
+        <div class="scan-status" id="scan-status"></div>
+      </div>
+
+      <!-- Duplicates -->
+      <div class="tab-panel" id="tab-duplicates">
+        <div class="panel-header">
+          <h1 class="panel-title">👯 Duplicate Files</h1>
+          <p class="panel-subtitle">Identical files found in your directory</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-sm" onclick="selectAllDuplicates()">Select All Extras</button>
+          <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('duplicates')">🗑 Move to Bin</button>
+          <span class="item-count" id="dup-count"></span>
+        </div>
+        <div class="file-list" id="duplicate-list"></div>
+      </div>
+
+      <!-- Large Files -->
+      <div class="tab-panel" id="tab-large">
+        <div class="panel-header">
+          <h1 class="panel-title">🌍 Large Files</h1>
+          <p class="panel-subtitle">Files consuming the most space</p>
+        </div>
+        <div class="toolbar">
+          <label class="size-label">Min size (MB): <input type="number" id="min-size" value="50" min="1" max="10000" style="width:70px" /></label>
+          <button class="btn btn-sm" onclick="rescanLarge()">Rescan</button>
+          <button class="btn btn-sm" onclick="selectAll('large-list')">Select All</button>
+          <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('large')">🗑 Move to Bin</button>
+          <span class="item-count" id="large-count"></span>
+        </div>
+        <div class="file-list" id="large-list"></div>
+      </div>
+
+      <!-- Junk Files -->
+      <div class="tab-panel" id="tab-junk">
+        <div class="panel-header">
+          <h1 class="panel-title">🗑️ Junk Files</h1>
+          <p class="panel-subtitle">Temporary, cache, log, and backup files</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-sm" onclick="selectAll('junk-list')">Select All</button>
+          <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('junk')">🗑 Move to Bin</button>
+          <span class="item-count" id="junk-count"></span>
+        </div>
+        <div class="file-list" id="junk-list"></div>
+      </div>
+
+      <!-- Recycle Bin -->
+      <div class="tab-panel" id="tab-bin">
+        <div class="panel-header">
+          <h1 class="panel-title">♻️ Recycle Bin</h1>
+          <p class="panel-subtitle">Files staged for deletion — review before purging</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-sm" onclick="selectAll('bin-list')">Select All</button>
+          <button class="btn btn-sm btn-success" onclick="restoreSelected()">↩ Restore Selected</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteSelected()">💥 Delete Forever</button>
+          <span class="item-count" id="bin-count"></span>
+        </div>
+        <div class="file-list" id="bin-list"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
