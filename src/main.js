@@ -94,7 +94,7 @@ function isExcluded(fullPath) {
   if (path.basename(fullPath).toLowerCase() === '.nebula-bin') return true;
   // Skip common system dirs that waste time
   const name = path.basename(fullPath).toLowerCase();
-  return ['$recycle.bin', 'system volume information', 'windows', 'pagefile.sys'].includes(name);
+  return ['$recycle.bin', 'system volume information', 'windows', 'pagefile.sys', 'node_modules', '.git'].includes(name);
 }
 
 async function walkDir(dir, files = [], depth = 0) {
