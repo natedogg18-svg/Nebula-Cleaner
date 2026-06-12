@@ -62,6 +62,12 @@
           <input type="text" id="dir-input" placeholder="Select or type a directory path..." readonly />
           <button class="btn btn-primary" onclick="pickDirectory()">📂 Browse</button>
         </div>
+        <div class="drive-selector">
+          <span class="drive-label">Quick select drive:</span>
+          <div class="drive-btns" id="drive-btns">
+            <span class="drive-hint">Detecting drives...</span>
+          </div>
+        </div>
 
         <div class="scan-cards">
           <div class="scan-card" onclick="runScan('duplicates')">

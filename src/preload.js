@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('nebula', {
   restoreFromBin: (id) => ipcRenderer.invoke('restore-from-bin', id),
   deleteFromBin: (ids) => ipcRenderer.invoke('delete-from-bin', ids),
   getDiskInfo: () => ipcRenderer.invoke('get-disk-info'),
+  getDrives: () => ipcRenderer.invoke('get-drives'),
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),

@@ -258,6 +258,27 @@ async function deleteSelected() {
   await loadBin();
 }
 
+// Drive selector
+async function loadDrives() {
+  const drives = await window.nebula.getDrives();
+  const container = document.getElementById('drive-btns');
+  if (!drives.length) { container.innerHTML = '<span class="drive-hint">No drives detected</span>'; return; }
+  container.innerHTML = drives.map(d => `
+    <button class="btn btn-drive" onclick="selectDrive('${d.path.replace(/\\/g, '\\\\')}', '${d.label}')" title="${d.freeFormatted || ''} free of ${d.sizeFormatted || ''}">
+      💾 ${d.path} ${d.label ? `<span class="drive-name">${d.label}</span>` : ''}
+      ${d.size ? `<span class="drive-free">${d.freeFormatted} free</span>` : ''}
+    </button>`).join('');
+}
+
+function selectDrive(drivePath, label) {
+  state.dir = drivePath;
+  document.getElementById('dir-input').value = drivePath;
+  setStatus(`Selected drive: ${drivePath} — click Launch Full Scan`);
+  document.querySelectorAll('.btn-drive').forEach(b => b.classList.remove('active-drive'));
+  event.target.closest('.btn-drive').classList.add('active-drive');
+}
+
 // Init
 initStars();
 loadDiskInfo();
+loadDrives();

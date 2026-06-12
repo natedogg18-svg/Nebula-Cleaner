@@ -287,6 +287,23 @@ body {
 .toast.success { border-color: var(--success); }
 .toast.error { border-color: var(--danger); }
 
+/* Drive selector */
+.drive-selector { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.drive-label { font-size: 12px; color: var(--text2); flex-shrink: 0; }
+.drive-hint { font-size: 12px; color: var(--text3); }
+.drive-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-drive {
+  display: flex; flex-direction: column; align-items: flex-start;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; cursor: pointer;
+  color: var(--text); font-size: 12px; font-weight: 600;
+  transition: all 0.15s; min-width: 100px;
+}
+.btn-drive:hover { border-color: var(--accent); color: var(--accent2); }
+.btn-drive.active-drive { border-color: var(--accent2); background: var(--surface2); color: var(--accent2); box-shadow: var(--glow); }
+.drive-name { font-size: 11px; color: var(--text2); font-weight: 400; }
+.drive-free { font-size: 11px; color: var(--accent3); font-weight: 400; }
+
 /* Loading spinner */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }

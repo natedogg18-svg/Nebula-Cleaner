@@ -290,3 +290,31 @@ ipcMain.handle('delete-from-bin', async (_, ids) => {
 ipcMain.handle('get-disk-info', async () => {
   return { totalMem: os.totalmem(), freeMem: os.freemem(), homedir: os.homedir(), platform: process.platform };
 });
+
+// Detect available drives (Windows only)
+ipcMain.handle('get-drives', async () => {
+  if (process.platform !== 'win32') {
+    return [{ path: '/', label: 'Root' }];
+  }
+  const { execSync } = require('child_process');
+  try {
+    const output = execSync('wmic logicaldisk get DeviceID,VolumeName,Size,FreeSpace /format:csv', { encoding: 'utf8' });
+    const drives = [];
+    for (const line of output.split('\n')) {
+      const parts = line.trim().split(',');
+      if (parts.length < 5 || !parts[1] || !parts[1].match(/^[A-Z]:$/)) continue;
+      const freeSpace = parseInt(parts[2]) || 0;
+      const size = parseInt(parts[4]) || 0;
+      const label = parts[3] || parts[1];
+      drives.push({
+        path: parts[1] + '\\',
+        label,
+        freeSpace,
+        size,
+        freeFormatted: formatBytes(freeSpace),
+        sizeFormatted: formatBytes(size),
+      });
+    }
+    return drives;
+  } catch { return []; }
+});
