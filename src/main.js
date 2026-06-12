@@ -308,23 +308,19 @@ ipcMain.handle('get-drives', async () => {
   }
   const { execSync } = require('child_process');
   try {
-    const output = execSync('wmic logicaldisk get DeviceID,VolumeName,Size,FreeSpace /format:csv', { encoding: 'utf8' });
-    const drives = [];
-    for (const line of output.split('\n')) {
-      const parts = line.trim().split(',');
-      if (parts.length < 5 || !parts[1] || !parts[1].match(/^[A-Z]:$/)) continue;
-      const freeSpace = parseInt(parts[2]) || 0;
-      const size = parseInt(parts[4]) || 0;
-      const label = parts[3] || parts[1];
-      drives.push({
-        path: parts[1] + '\\',
-        label,
-        freeSpace,
-        size,
-        freeFormatted: formatBytes(freeSpace),
-        sizeFormatted: formatBytes(size),
-      });
-    }
-    return drives;
+    const output = execSync(
+      'powershell -NoProfile -Command "Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N=\'Size\';E={$_.Used+$_.Free}},Free,Description | ConvertTo-Json"',
+      { encoding: 'utf8', timeout: 8000 }
+    );
+    const raw = JSON.parse(output);
+    const items = Array.isArray(raw) ? raw : [raw];
+    return items.filter(d => d.Name && d.Name.match(/^[A-Z]$/i)).map(d => ({
+      path: d.Name.toUpperCase() + ':\\',
+      label: d.Description || '',
+      freeSpace: d.Free || 0,
+      size: d.Size || 0,
+      freeFormatted: formatBytes(d.Free || 0),
+      sizeFormatted: formatBytes(d.Size || 0),
+    }));
   } catch { return []; }
 });
