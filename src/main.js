@@ -91,20 +91,32 @@ function walkDir(dir, files = []) {
   return files;
 }
 
+// Throttled copy — 50 MB/s max to avoid freezing other apps
+const COPY_CHUNK = 256 * 1024; // 256 KB chunks
+const COPY_DELAY = 5;          // ms pause between chunks
+
+async function throttledCopy(src, dest) {
+  const fdr = fs.openSync(src, 'r');
+  const fdw = fs.openSync(dest, 'w');
+  const buf = Buffer.allocUnsafe(COPY_CHUNK);
+  let bytesRead;
+  try {
+    while ((bytesRead = fs.readSync(fdr, buf, 0, COPY_CHUNK, null)) > 0) {
+      fs.writeSync(fdw, buf, 0, bytesRead);
+      await new Promise(r => setTimeout(r, COPY_DELAY));
+    }
+  } finally {
+    fs.closeSync(fdr);
+    fs.closeSync(fdw);
+  }
+}
+
 async function moveFile(src, dest) {
   try {
     fs.renameSync(src, dest);
   } catch (e) {
     if (e.code === 'EXDEV') {
-      // Cross-device move — stream copy to avoid blocking UI
-      await new Promise((resolve, reject) => {
-        const rd = fs.createReadStream(src);
-        const wr = fs.createWriteStream(dest);
-        rd.on('error', reject);
-        wr.on('error', reject);
-        wr.on('finish', resolve);
-        rd.pipe(wr);
-      });
+      await throttledCopy(src, dest);
       fs.unlinkSync(src);
     } else {
       throw e;
