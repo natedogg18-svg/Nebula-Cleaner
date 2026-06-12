@@ -82,6 +82,21 @@ function isJunk(filename) {
   return JUNK_PATTERNS.some(p => p.test(filename));
 }
 
+const EXCLUDED_DIRS = new Set([
+  RECYCLE_BIN_BASE.toLowerCase(),
+  // Also exclude per-drive bin folders
+]);
+
+function isExcluded(fullPath) {
+  const p = fullPath.toLowerCase();
+  if (p === RECYCLE_BIN_BASE.toLowerCase()) return true;
+  // Exclude .nebula-bin folders on any drive
+  if (path.basename(fullPath).toLowerCase() === '.nebula-bin') return true;
+  // Skip common system dirs that waste time
+  const name = path.basename(fullPath).toLowerCase();
+  return ['$recycle.bin', 'system volume information', 'windows', 'pagefile.sys'].includes(name);
+}
+
 async function walkDir(dir, files = [], depth = 0) {
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return files; }
@@ -89,6 +104,7 @@ async function walkDir(dir, files = [], depth = 0) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) continue;
     if (entry.isDirectory()) {
+      if (isExcluded(full)) continue;
       // Yield to event loop every directory to keep UI responsive
       await new Promise(r => setImmediate(r));
       await walkDir(full, files, depth + 1);
