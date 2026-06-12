@@ -117,7 +117,13 @@ async function moveFile(src, dest) {
   } catch (e) {
     if (e.code === 'EXDEV') {
       await throttledCopy(src, dest);
-      fs.unlinkSync(src);
+      try {
+        fs.unlinkSync(src);
+      } catch (unlinkErr) {
+        // Delete the partial copy in bin so we don't have orphans
+        try { fs.unlinkSync(dest); } catch {}
+        throw new Error(`Copied but could not delete original: [${unlinkErr.code}] ${unlinkErr.message}`);
+      }
     } else {
       throw e;
     }
