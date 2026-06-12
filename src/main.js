@@ -229,6 +229,12 @@ ipcMain.handle('move-to-bin', async (_, filePaths) => {
   for (let i = 0; i < filePaths.length; i++) {
     const filePath = filePaths[i];
     try {
+      // Check file exists before trying anything
+      if (!fs.existsSync(filePath)) {
+        // Ghost file (e.g. .DS_Store on Windows) — just skip it as success
+        results.push({ success: true, path: filePath });
+        continue;
+      }
       const stat = fs.statSync(filePath);
       const id = `${Date.now()}_${i}_${Math.random().toString(36).slice(2)}`;
       // Store on same drive for instant rename — no cross-drive copy needed
