@@ -575,22 +575,27 @@ function renderAnalyzer(results, dir) {
     const pct = max > 0 ? Math.round((item.size / max) * 100) : 0;
     const isFolder = item.type === 'folder';
     const icon = isFolder ? '📁' : '📄';
-    const safePath = item.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    const clickable = isFolder ? `onclick="analyzerDrillDown('${safePath}')"` : '';
     const hoverClass = isFolder ? 'analyzer-row-folder' : '';
     return `
-      <div class="analyzer-row ${hoverClass}">
-        <div class="analyzer-icon" ${clickable} style="${isFolder ? 'cursor:pointer' : ''}">${icon}</div>
-        <div class="analyzer-info" ${clickable} style="${isFolder ? 'cursor:pointer' : ''}">
+      <div class="analyzer-row ${hoverClass}" data-path="${escHtml(item.path)}" data-type="${item.type}">
+        <div class="analyzer-icon" style="${isFolder ? 'cursor:pointer' : ''}" ${isFolder ? 'onclick="analyzerRowClick(this)"' : ''}>${icon}</div>
+        <div class="analyzer-info" style="${isFolder ? 'cursor:pointer' : ''}" ${isFolder ? 'onclick="analyzerRowClick(this)"' : ''}>
           <div class="analyzer-name">${escHtml(item.name)}${isFolder ? ' <span class="analyzer-drill">▶</span>' : ''}</div>
           <div class="analyzer-bar-wrap"><div class="analyzer-bar" style="width:${pct}%"></div></div>
         </div>
         <div class="analyzer-size">${item.sizeFormatted}</div>
-        <button class="btn btn-sm analyzer-move" onclick="showMoveToDrive('${safePath}')" title="Move to another drive">📦 Move</button>
-        <button class="btn btn-sm btn-danger analyzer-del" onclick="analyzerMoveToBin('${safePath}', '${item.type}')" title="Move to bin">🗑</button>
+        <button class="btn btn-sm analyzer-move" onclick="analyzerMoveClick(this)" title="Move to another drive">📦 Move</button>
+        <button class="btn btn-sm btn-danger analyzer-del" onclick="analyzerBinClick(this)" title="Move to bin">🗑</button>
       </div>`;
   }).join('');
 }
+
+function getRowPath(el) {
+  return el.closest('.analyzer-row').dataset.path;
+}
+function analyzerRowClick(el) { analyzerDrillDown(getRowPath(el)); }
+function analyzerMoveClick(el) { showMoveToDrive(getRowPath(el)); }
+function analyzerBinClick(el) { analyzerMoveToBin(getRowPath(el), el.closest('.analyzer-row').dataset.type); }
 
 let pendingMovePath = null;
 
