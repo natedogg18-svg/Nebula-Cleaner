@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('nebula', {
   setSchedule: (settings) => ipcRenderer.invoke('set-schedule', settings),
   triggerScheduleCheck: () => ipcRenderer.invoke('trigger-schedule-check'),
   onProgress: (cb) => ipcRenderer.on('scan-progress', (_, data) => cb(data)),
+  onCopyProgress: (cb) => ipcRenderer.on('copy-progress', (_, data) => cb(data)),
+  offCopyProgress: () => ipcRenderer.removeAllListeners('copy-progress'),
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),

@@ -608,21 +608,17 @@ async function showMoveToDrive(itemPath) {
   modal.classList.add('show');
   try {
     let drives = await window.nebula.getDrives();
-    // Normalize: handle both {path} and {drive} shapes, filter invalid
     drives = (drives || []).map(d => ({
       path: d.path || d.drive || '',
       label: d.label || '',
       freeFormatted: d.freeFormatted || '',
     })).filter(d => d.path);
-    // Fallback: if no drives detected, offer common drive letters
     if (!drives.length) {
       drives = ['C:\\','D:\\','E:\\','F:\\'].map(p => ({ path: p, label: '', freeFormatted: '' }));
     }
-    const srcDrive = (pendingMovePath || '').substring(0, 3).toUpperCase();
     list.innerHTML = drives.map(d => {
-      const drivePath = d.path;
-      return `<button class="btn drive-pick-btn" data-drive="${escHtml(drivePath)}" onclick="confirmMoveToDriveBtn(this)">
-        💾 ${escHtml(drivePath)} <span class="drive-name">${escHtml(d.label)}</span>
+      return `<button class="btn drive-pick-btn" data-drive="${escHtml(d.path)}" onclick="confirmMoveToDriveBtn(this)">
+        💾 ${escHtml(d.path)} <span class="drive-name">${escHtml(d.label)}</span>
         ${d.freeFormatted ? `<span class="drive-free">${escHtml(d.freeFormatted)} free</span>` : ''}
       </button>`;
     }).join('');
@@ -640,28 +636,58 @@ function confirmMoveToDriveBtn(btn) {
   confirmMoveToDrive(btn.dataset.drive);
 }
 
+let moveStartTime = null;
+
+function showProgressModal() {
+  moveStartTime = Date.now();
+  document.getElementById('progress-modal').classList.add('show');
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-label').textContent = 'Preparing…';
+  document.getElementById('progress-file').textContent = '';
+}
+
+function hideProgressModal() {
+  document.getElementById('progress-modal').classList.remove('show');
+}
+
+function updateMoveProgress(copied, total, file) {
+  const pct = total > 0 ? Math.round((copied / total) * 100) : 0;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  let timeStr = '';
+  if (copied > 1 && moveStartTime) {
+    const elapsed = (Date.now() - moveStartTime) / 1000;
+    const secsLeft = Math.ceil((elapsed / copied) * (total - copied));
+    timeStr = secsLeft < 60 ? ` — ~${secsLeft}s left` : ` — ~${Math.ceil(secsLeft / 60)}m left`;
+  }
+  document.getElementById('progress-label').textContent = `${copied} / ${total} files (${pct}%)${timeStr}`;
+  document.getElementById('progress-file').textContent = file ? `Copying: ${file}` : '';
+}
+
 async function confirmMoveToDrive(destDrive) {
-  const srcPath = pendingMovePath;
+  const src = pendingMovePath;
   closeModal();
-  if (!srcPath) { showToast('Error: no file selected', 'error'); return; }
+  if (!src) { showToast('Error: no file selected', 'error'); return; }
   if (!destDrive) { showToast('Error: no drive selected', 'error'); return; }
-  showToast(`⏳ Moving "${srcPath.split(/[\\/]/).pop()}" to ${destDrive}... please wait`);
-  let results;
+  showProgressModal();
+  window.nebula.onCopyProgress((data) => {
+    if (data.done) hideProgressModal();
+    else updateMoveProgress(data.copied, data.total, data.file);
+  });
   try {
-    results = await window.nebula.moveToDrive([srcPath], destDrive);
-  } catch (e) {
-    showToast(`Error: ${e.message}`, 'error');
-    return;
-  }
-  if (!results || !results.length) {
-    showToast('Error: no response from move operation', 'error');
-    return;
-  }
-  if (results[0].success) {
-    showToast(`✅ Moved to ${destDrive}`, 'success');
-    if (analyzerHistory.length > 0) await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
-  } else {
-    showToast(`❌ Move failed: ${results[0].error || 'unknown error'}`, 'error');
+    const results = await window.nebula.moveToDrive([src], destDrive);
+    window.nebula.offCopyProgress();
+    hideProgressModal();
+    if (!results || !results.length) { showToast('Error: no response from move operation', 'error'); return; }
+    if (results[0].success) {
+      showToast(`✅ Moved to ${destDrive}`, 'success');
+      if (analyzerHistory.length > 0) await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
+    } else {
+      showToast(`❌ Move failed: ${results[0].error || 'unknown error'}`, 'error');
+    }
+  } catch (err) {
+    window.nebula.offCopyProgress();
+    hideProgressModal();
+    showToast('Move failed: ' + err.message, 'error');
   }
 }
 

@@ -470,7 +470,19 @@ ipcMain.handle('delete-from-bin', async (_, ids) => {
 });
 
 // Move files/folders to another drive/location
-ipcMain.handle('move-to-drive', async (_, srcPaths, destDir) => {
+function countFilesSync(src) {
+  let count = 0;
+  try {
+    const stat = fs.statSync(src);
+    if (!stat.isDirectory()) return 1;
+    for (const entry of fs.readdirSync(src)) {
+      count += countFilesSync(path.join(src, entry));
+    }
+  } catch {}
+  return count;
+}
+
+ipcMain.handle('move-to-drive', async (event, srcPaths, destDir) => {
   const results = [];
   for (const src of srcPaths) {
     try {
@@ -478,28 +490,40 @@ ipcMain.handle('move-to-drive', async (_, srcPaths, destDir) => {
       const destPath = path.join(destDir, path.basename(src));
       try {
         fs.renameSync(src, destPath);
+        event.sender.send('copy-progress', { done: true });
       } catch (e) {
         if (e.code === 'EXDEV') {
-          await copyRecursive(src, destPath);
+          const total = countFilesSync(src);
+          let copied = 0;
+          await copyRecursive(src, destPath, (file) => {
+            copied++;
+            event.sender.send('copy-progress', { copied, total, file: path.basename(file) });
+          });
           await deleteRecursive(src);
+          event.sender.send('copy-progress', { done: true });
         } else throw e;
       }
       results.push({ success: true, path: src, dest: destPath });
     } catch (e) {
       console.error('move-to-drive failed:', src, e.code, e.message);
+      event.sender.send('copy-progress', { done: true });
       results.push({ success: false, path: src, error: `[${e.code}] ${e.message}` });
     }
   }
   return results;
 });
 
-async function copyRecursive(src, dest) {
+async function copyRecursive(src, dest, onFile) {
   const stat = fs.statSync(src);
   if (stat.isDirectory()) {
-    // Use built-in recursive copy — fast, no throttle needed for user-initiated moves
-    fs.cpSync(src, dest, { recursive: true, errorOnExist: false });
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src)) {
+      await new Promise(r => setImmediate(r));
+      await copyRecursive(path.join(src, entry), path.join(dest, entry), onFile);
+    }
   } else {
-    fs.copyFileSync(src, dest);
+    await fs.promises.copyFile(src, dest);
+    if (onFile) onFile(src);
   }
 }
 
