@@ -93,6 +93,10 @@ const EXCLUDED_DIR_NAMES = new Set([
   'adobetemp', 'adobe temp', 'temp', 'tmp',
   'appdata', 'application data', 'node_modules', '.git',
   '.nebula-bin',
+  // Electron app cache folders
+  'nebula-cleaner', 'cache', 'code cache', 'gpucache', 'dawngraphitecache',
+  'dawnwebgpucache', 'blob_storage', 'session storage', 'local storage',
+  'shared dictionary', 'network',
 ]);
 
 const PROTECTED_ROOT_FILES = new Set([
@@ -534,6 +538,7 @@ async function deleteRecursive(src) {
 // Space analyzer — Feature 1: yield every dir AND limit depth to 3
 async function getDirSize(dir, depth = 0) {
   if (depth >= 3) return 0;
+  if (isExcluded(dir)) return 0;
   let size = 0;
   let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return 0; }
@@ -542,7 +547,7 @@ async function getDirSize(dir, depth = 0) {
     if (e.isSymbolicLink()) continue;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
-      if (depth + 1 < 3) {
+      if (!isExcluded(full) && depth + 1 < 3) {
         size += await getDirSize(full, depth + 1);
       }
     } else {
@@ -560,6 +565,7 @@ ipcMain.handle('analyze-space', async (_, dir) => {
     if (entry.isSymbolicLink()) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (isExcluded(full)) continue;
       const size = await getDirSize(full);
       results.push({ name: entry.name, path: full, size, sizeFormatted: formatBytes(size), type: 'folder' });
     } else {
