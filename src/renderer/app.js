@@ -596,15 +596,24 @@ let pendingMovePath = null;
 
 async function showMoveToDrive(itemPath) {
   pendingMovePath = itemPath;
-  const drives = await window.nebula.getDrives();
   const modal = document.getElementById('move-modal');
   const list = document.getElementById('move-drive-list');
-  list.innerHTML = drives.map(d => `
-    <button class="btn drive-pick-btn" onclick="confirmMoveToDrive('${d.path.replace(/\\/g, '\\\\')}')">
-      💾 ${d.path} <span class="drive-name">${d.label || ''}</span>
-      <span class="drive-free">${d.freeFormatted || ''} free</span>
-    </button>`).join('');
+  list.innerHTML = '<div style="color:var(--text2);font-size:13px">Loading drives...</div>';
   modal.classList.add('show');
+  try {
+    let drives = await window.nebula.getDrives();
+    // Fallback: if PowerShell failed, offer common drive letters
+    if (!drives || !drives.length) {
+      drives = ['C:\\','D:\\','E:\\','F:\\'].map(p => ({ path: p, label: '', freeFormatted: '', sizeFormatted: '' }));
+    }
+    list.innerHTML = drives.map(d => `
+      <button class="btn drive-pick-btn" onclick="confirmMoveToDrive('${d.path.replace(/\\/g, '\\\\')}')">
+        💾 ${d.path} <span class="drive-name">${d.label || ''}</span>
+        ${d.freeFormatted ? `<span class="drive-free">${d.freeFormatted} free</span>` : ''}
+      </button>`).join('');
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);font-size:12px">Error loading drives: ${e.message}</div>`;
+  }
 }
 
 function closeModal() {
