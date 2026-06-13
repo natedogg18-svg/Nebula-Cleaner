@@ -486,7 +486,8 @@ ipcMain.handle('move-to-drive', async (_, srcPaths, destDir) => {
       }
       results.push({ success: true, path: src, dest: destPath });
     } catch (e) {
-      results.push({ success: false, path: src, error: e.message });
+      console.error('move-to-drive failed:', src, e.code, e.message);
+      results.push({ success: false, path: src, error: `[${e.code}] ${e.message}` });
     }
   }
   return results;
@@ -495,24 +496,15 @@ ipcMain.handle('move-to-drive', async (_, srcPaths, destDir) => {
 async function copyRecursive(src, dest) {
   const stat = fs.statSync(src);
   if (stat.isDirectory()) {
-    fs.mkdirSync(dest, { recursive: true });
-    for (const entry of fs.readdirSync(src)) {
-      await new Promise(r => setImmediate(r));
-      await copyRecursive(path.join(src, entry), path.join(dest, entry));
-    }
+    // Use built-in recursive copy — fast, no throttle needed for user-initiated moves
+    fs.cpSync(src, dest, { recursive: true, errorOnExist: false });
   } else {
-    await throttledCopy(src, dest);
+    fs.copyFileSync(src, dest);
   }
 }
 
 async function deleteRecursive(src) {
-  const stat = fs.statSync(src);
-  if (stat.isDirectory()) {
-    for (const entry of fs.readdirSync(src)) await deleteRecursive(path.join(src, entry));
-    fs.rmdirSync(src);
-  } else {
-    fs.unlinkSync(src);
-  }
+  fs.rmSync(src, { recursive: true, force: true });
 }
 
 // Space analyzer — Feature 1: yield every dir AND limit depth to 3
