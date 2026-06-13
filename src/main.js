@@ -435,9 +435,35 @@ ipcMain.handle('move-to-bin', async (_, filePaths) => {
   return results;
 });
 
-// Get recycle bin contents
+// Get recycle bin contents — reconcile meta.json with physical files on disk
 ipcMain.handle('get-bin', async () => {
-  try { return JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch { return []; }
+  let meta = [];
+  try { meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8')); } catch {}
+
+  // Find orphaned files in RecycleBin dir that aren't tracked in meta
+  let physical = [];
+  try { physical = fs.readdirSync(RECYCLE_BIN_BASE).filter(f => f !== 'meta.json'); } catch {}
+  const trackedIds = new Set(meta.map(m => m.id));
+  for (const name of physical) {
+    if (trackedIds.has(name)) continue;
+    const fullPath = path.join(RECYCLE_BIN_BASE, name);
+    try {
+      const st = fs.statSync(fullPath);
+      meta.push({
+        id: name,
+        name: name,
+        originalPath: fullPath,
+        binDir: RECYCLE_BIN_BASE,
+        size: st.size,
+        sizeFormatted: formatBytes(st.size),
+        deletedAt: st.mtime.toISOString(),
+        orphaned: true,
+      });
+    } catch {}
+  }
+  // Save reconciled meta
+  try { fs.writeFileSync(META_FILE, JSON.stringify(meta, null, 2)); } catch {}
+  return meta;
 });
 
 // Restore from bin
