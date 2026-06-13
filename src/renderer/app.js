@@ -260,10 +260,11 @@ async function deleteSelected() {
 }
 
 // Space Analyzer
-async function runAnalyzer() {
-  const dir = state.dir || 'C:\\';
+const analyzerHistory = [];
+
+async function analyzeDir(dir) {
   document.getElementById('analyzer-count').textContent = `Analyzing ${dir} ...`;
-  document.getElementById('analyzer-bars').innerHTML = '<div class="empty-state"><span class="spinner"></span> Calculating folder sizes... this may take a minute</div>';
+  document.getElementById('analyzer-bars').innerHTML = '<div class="empty-state"><span class="spinner"></span> Calculating folder sizes...</div>';
   try {
     const results = await window.nebula.analyzeSpace(dir);
     renderAnalyzer(results, dir);
@@ -273,24 +274,66 @@ async function runAnalyzer() {
   }
 }
 
+async function runAnalyzer() {
+  const dir = state.dir || 'C:\\';
+  analyzerHistory.length = 0;
+  analyzerHistory.push(dir);
+  await analyzeDir(dir);
+}
+
+async function analyzerDrillDown(folderPath) {
+  analyzerHistory.push(folderPath);
+  await analyzeDir(folderPath);
+}
+
+async function analyzerBack() {
+  if (analyzerHistory.length <= 1) return;
+  analyzerHistory.pop();
+  await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
+}
+
 function renderAnalyzer(results, dir) {
   const container = document.getElementById('analyzer-bars');
-  if (!results.length) { container.innerHTML = emptyState('📊', 'Nothing found'); return; }
+  const canGoBack = analyzerHistory.length > 1;
+  const backBtn = canGoBack ? `<button class="btn btn-sm" onclick="analyzerBack()" style="margin-bottom:8px">⬅ Back</button>` : '';
+  const breadcrumb = `<div class="analyzer-breadcrumb">${backBtn}<span class="analyzer-path">${escHtml(dir)}</span></div>`;
+
+  if (!results.length) {
+    container.innerHTML = breadcrumb + emptyState('📊', 'Nothing found or folder is empty');
+    return;
+  }
   const max = results[0].size;
   document.getElementById('analyzer-count').textContent = `Top ${results.length} items in ${dir}`;
-  container.innerHTML = results.map(item => {
+  container.innerHTML = breadcrumb + results.map(item => {
     const pct = max > 0 ? Math.round((item.size / max) * 100) : 0;
-    const icon = item.type === 'folder' ? '📁' : '📄';
+    const isFolder = item.type === 'folder';
+    const icon = isFolder ? '📁' : '📄';
+    const safePath = item.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const clickable = isFolder ? `onclick="analyzerDrillDown('${safePath}')"` : '';
+    const hoverClass = isFolder ? 'analyzer-row-folder' : '';
     return `
-      <div class="analyzer-row">
-        <div class="analyzer-icon">${icon}</div>
-        <div class="analyzer-info">
-          <div class="analyzer-name">${escHtml(item.name)}</div>
+      <div class="analyzer-row ${hoverClass}">
+        <div class="analyzer-icon" ${clickable} style="${isFolder ? 'cursor:pointer' : ''}">${icon}</div>
+        <div class="analyzer-info" ${clickable} style="${isFolder ? 'cursor:pointer' : ''}">
+          <div class="analyzer-name">${escHtml(item.name)}${isFolder ? ' <span class="analyzer-drill">▶</span>' : ''}</div>
           <div class="analyzer-bar-wrap"><div class="analyzer-bar" style="width:${pct}%"></div></div>
         </div>
         <div class="analyzer-size">${item.sizeFormatted}</div>
+        <button class="btn btn-sm btn-danger analyzer-del" onclick="analyzerMoveToBin('${safePath}', '${item.type}')" title="Move to bin">🗑</button>
       </div>`;
   }).join('');
+}
+
+async function analyzerMoveToBin(itemPath, type) {
+  showToast(`⏳ Moving to bin...`);
+  const results = await window.nebula.moveToBin([itemPath]);
+  if (results[0].success) {
+    showToast(`Moved to bin!`, 'success');
+    // Refresh current analyzer view
+    await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
+  } else {
+    showToast(`Failed: ${results[0].error}`, 'error');
+  }
 }
 
 // Drive selector
