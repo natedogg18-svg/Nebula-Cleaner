@@ -5,14 +5,15 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "build": "electron-builder",
+    "build:win": "electron-builder --win"
   },
   "repository": {
     "type": "git",
     "url": "http://local_proxy@127.0.0.1:46329/git/natedogg18-svg/Nebula-Cleaner"
   },
   "keywords": [],
-  "author": "",
+  "author": "Nebula Cleaner",
   "license": "ISC",
   "dependencies": {
     "electron": "^42.4.0",
@@ -21,5 +22,40 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.nebulacleaner.app",
+    "productName": "Nebula Cleaner",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Nebula-Cleaner-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nebula Cleaner"
+    },
+    "mac": {
+      "target": "dmg",
+      "artifactName": "Nebula-Cleaner-${version}.dmg"
+    },
+    "linux": {
+      "target": "AppImage",
+      "artifactName": "Nebula-Cleaner-${version}.AppImage"
+    }
   }
 }
