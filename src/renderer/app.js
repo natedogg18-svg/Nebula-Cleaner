@@ -584,8 +584,8 @@ function renderAnalyzer(results, dir) {
           <div class="analyzer-bar-wrap"><div class="analyzer-bar" style="width:${pct}%"></div></div>
         </div>
         <div class="analyzer-size">${item.sizeFormatted}</div>
-        <button class="btn btn-sm analyzer-move" onclick="analyzerMoveClick(this)" title="Move to another drive">📦 Move</button>
-        <button class="btn btn-sm btn-danger analyzer-del" onclick="analyzerBinClick(this)" title="Move to bin">🗑</button>
+        <button class="btn btn-sm analyzer-move" onclick="analyzerMoveClick(this,event)" title="Move to another drive">📦 Move</button>
+        <button class="btn btn-sm btn-danger analyzer-del" onclick="analyzerBinClick(this,event)" title="Move to bin">🗑</button>
       </div>`;
   }).join('');
 }
@@ -594,8 +594,8 @@ function getRowPath(el) {
   return el.closest('.analyzer-row').dataset.path;
 }
 function analyzerRowClick(el) { analyzerDrillDown(getRowPath(el)); }
-function analyzerMoveClick(el) { showMoveToDrive(getRowPath(el)); }
-function analyzerBinClick(el) { analyzerMoveToBin(getRowPath(el), el.closest('.analyzer-row').dataset.type); }
+function analyzerMoveClick(el, event) { if (event) event.stopPropagation(); showMoveToDrive(getRowPath(el)); }
+function analyzerBinClick(el, event) { if (event) event.stopPropagation(); analyzerMoveToBin(getRowPath(el), el.closest('.analyzer-row').dataset.type); }
 
 let pendingMovePath = null;
 
@@ -603,6 +603,7 @@ async function showMoveToDrive(itemPath) {
   pendingMovePath = itemPath;
   const modal = document.getElementById('move-modal');
   const list = document.getElementById('move-drive-list');
+  if (!modal || !list) { showToast('Error: move modal not found in DOM', 'error'); return; }
   list.innerHTML = '<div style="color:var(--text2);font-size:13px">Loading drives...</div>';
   modal.classList.add('show');
   try {
