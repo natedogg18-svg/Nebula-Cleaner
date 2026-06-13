@@ -93,10 +93,6 @@ const EXCLUDED_DIR_NAMES = new Set([
   'adobetemp', 'adobe temp', 'temp', 'tmp',
   'appdata', 'application data', 'node_modules', '.git',
   '.nebula-bin',
-  // Electron app cache folders
-  'nebula-cleaner', 'cache', 'code cache', 'gpucache', 'dawngraphitecache',
-  'dawnwebgpucache', 'blob_storage', 'session storage', 'local storage',
-  'shared dictionary', 'network',
 ]);
 
 const PROTECTED_ROOT_FILES = new Set([
@@ -547,6 +543,11 @@ async function getDirSize(dir, depth = 0) {
     if (e.isSymbolicLink()) continue;
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
+      // Skip junction points (Windows reparse points) to avoid infinite loops
+      try {
+        const st = fs.lstatSync(full);
+        if (st.isSymbolicLink()) continue;
+      } catch { continue; }
       if (!isExcluded(full) && depth + 1 < 3) {
         size += await getDirSize(full, depth + 1);
       }
