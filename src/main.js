@@ -508,9 +508,14 @@ function countFilesSync(src) {
   return count;
 }
 
+let _cancelMove = false;
+ipcMain.on('cancel-move', () => { _cancelMove = true; });
+
 ipcMain.handle('move-to-drive', async (event, srcPaths, destDir) => {
+  _cancelMove = false;
   const results = [];
   for (const src of srcPaths) {
+    if (_cancelMove) { results.push({ success: false, path: src, error: 'Cancelled' }); continue; }
     try {
       if (!fs.existsSync(src)) { results.push({ success: false, path: src, error: 'File not found' }); continue; }
       const destPath = path.join(destDir, path.basename(src));
@@ -525,6 +530,12 @@ ipcMain.handle('move-to-drive', async (event, srcPaths, destDir) => {
             copied++;
             event.sender.send('copy-progress', { copied, total, file: path.basename(file) });
           });
+          if (_cancelMove) {
+            // Clean up partial copy
+            try { fs.rmSync(destPath, { recursive: true, force: true }); } catch {}
+            results.push({ success: false, path: src, error: 'Cancelled' });
+            continue;
+          }
           await deleteRecursive(src);
           event.sender.send('copy-progress', { done: true });
         } else throw e;
@@ -540,10 +551,12 @@ ipcMain.handle('move-to-drive', async (event, srcPaths, destDir) => {
 });
 
 async function copyRecursive(src, dest, onFile) {
+  if (_cancelMove) return;
   const stat = fs.statSync(src);
   if (stat.isDirectory()) {
     fs.mkdirSync(dest, { recursive: true });
     for (const entry of fs.readdirSync(src)) {
+      if (_cancelMove) return;
       await new Promise(r => setImmediate(r));
       await copyRecursive(path.join(src, entry), path.join(dest, entry), onFile);
     }

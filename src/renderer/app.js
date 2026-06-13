@@ -650,6 +650,12 @@ function hideProgressModal() {
   document.getElementById('progress-modal').classList.remove('show');
 }
 
+function cancelMove() {
+  window.nebula.cancelMove();
+  hideProgressModal();
+  showToast('Move cancelled', 'error');
+}
+
 function updateMoveProgress(copied, total, file) {
   const pct = total > 0 ? Math.round((copied / total) * 100) : 0;
   document.getElementById('progress-fill').style.width = pct + '%';

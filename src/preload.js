@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('nebula', {
   getDrives: () => ipcRenderer.invoke('get-drives'),
   analyzeSpace: (dir) => ipcRenderer.invoke('analyze-space', dir),
   moveToDrive: (srcPaths, destDir) => ipcRenderer.invoke('move-to-drive', srcPaths, destDir),
+  cancelMove: () => ipcRenderer.send('cancel-move'),
   getSchedule: () => ipcRenderer.invoke('get-schedule'),
   setSchedule: (settings) => ipcRenderer.invoke('set-schedule', settings),
   triggerScheduleCheck: () => ipcRenderer.invoke('trigger-schedule-check'),
