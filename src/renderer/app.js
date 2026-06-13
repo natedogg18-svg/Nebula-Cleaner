@@ -607,15 +607,24 @@ async function showMoveToDrive(itemPath) {
   modal.classList.add('show');
   try {
     let drives = await window.nebula.getDrives();
-    // Fallback: if PowerShell failed, offer common drive letters
-    if (!drives || !drives.length) {
-      drives = ['C:\\','D:\\','E:\\','F:\\'].map(p => ({ path: p, label: '', freeFormatted: '', sizeFormatted: '' }));
+    // Normalize: handle both {path} and {drive} shapes, filter invalid
+    drives = (drives || []).map(d => ({
+      path: d.path || d.drive || '',
+      label: d.label || '',
+      freeFormatted: d.freeFormatted || '',
+    })).filter(d => d.path);
+    // Fallback: if no drives detected, offer common drive letters
+    if (!drives.length) {
+      drives = ['C:\\','D:\\','E:\\','F:\\'].map(p => ({ path: p, label: '', freeFormatted: '' }));
     }
-    list.innerHTML = drives.map(d => `
-      <button class="btn drive-pick-btn" onclick="confirmMoveToDrive('${d.path.replace(/\\/g, '\\\\')}')">
-        💾 ${d.path} <span class="drive-name">${d.label || ''}</span>
-        ${d.freeFormatted ? `<span class="drive-free">${d.freeFormatted} free</span>` : ''}
-      </button>`).join('');
+    const srcDrive = (pendingMovePath || '').substring(0, 3).toUpperCase();
+    list.innerHTML = drives.map(d => {
+      const drivePath = d.path;
+      return `<button class="btn drive-pick-btn" data-drive="${escHtml(drivePath)}" onclick="confirmMoveToDriveBtn(this)">
+        💾 ${escHtml(drivePath)} <span class="drive-name">${escHtml(d.label)}</span>
+        ${d.freeFormatted ? `<span class="drive-free">${escHtml(d.freeFormatted)} free</span>` : ''}
+      </button>`;
+    }).join('');
   } catch (e) {
     list.innerHTML = `<div style="color:var(--danger);font-size:12px">Error loading drives: ${e.message}</div>`;
   }
@@ -624,6 +633,10 @@ async function showMoveToDrive(itemPath) {
 function closeModal() {
   document.getElementById('move-modal').classList.remove('show');
   pendingMovePath = null;
+}
+
+function confirmMoveToDriveBtn(btn) {
+  confirmMoveToDrive(btn.dataset.drive);
 }
 
 async function confirmMoveToDrive(destDrive) {
@@ -653,14 +666,19 @@ async function analyzerMoveToBin(itemPath, type) {
 
 // Drive selector
 async function loadDrives() {
-  const drives = await window.nebula.getDrives();
+  let drives = await window.nebula.getDrives();
+  drives = (drives || []).map(d => ({ path: d.path || d.drive || '', label: d.label || '', freeFormatted: d.freeFormatted || '', sizeFormatted: d.sizeFormatted || '', size: d.size || 0 })).filter(d => d.path);
   const container = document.getElementById('drive-btns');
   if (!drives.length) { container.innerHTML = '<span class="drive-hint">No drives detected</span>'; return; }
   container.innerHTML = drives.map(d => `
-    <button class="btn btn-drive" onclick="selectDrive('${d.path.replace(/\\/g, '\\\\')}', '${d.label || ''}')" title="${d.freeFormatted || ''} free of ${d.sizeFormatted || ''}">
-      💾 ${d.path} ${d.label ? `<span class="drive-name">${d.label}</span>` : ''}
-      ${d.size ? `<span class="drive-free">${d.freeFormatted} free</span>` : ''}
+    <button class="btn btn-drive" data-drive="${escHtml(d.path)}" data-label="${escHtml(d.label)}" onclick="selectDriveBtn(this)" title="${escHtml(d.freeFormatted)} free of ${escHtml(d.sizeFormatted)}">
+      💾 ${escHtml(d.path)} ${d.label ? `<span class="drive-name">${escHtml(d.label)}</span>` : ''}
+      ${d.size ? `<span class="drive-free">${escHtml(d.freeFormatted)} free</span>` : ''}
     </button>`).join('');
+}
+
+function selectDriveBtn(btn) {
+  selectDrive(btn.dataset.drive, btn.dataset.label);
 }
 
 function selectDrive(drivePath, label) {
