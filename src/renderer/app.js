@@ -642,14 +642,25 @@ function confirmMoveToDriveBtn(btn) {
 async function confirmMoveToDrive(destDrive) {
   const srcPath = pendingMovePath;
   closeModal();
-  if (!srcPath) return;
-  showToast(`⏳ Moving to ${destDrive}... please wait`);
-  const results = await window.nebula.moveToDrive([srcPath], destDrive);
+  if (!srcPath) { showToast('Error: no file selected', 'error'); return; }
+  if (!destDrive) { showToast('Error: no drive selected', 'error'); return; }
+  showToast(`⏳ Moving "${srcPath.split(/[\\/]/).pop()}" to ${destDrive}... please wait`);
+  let results;
+  try {
+    results = await window.nebula.moveToDrive([srcPath], destDrive);
+  } catch (e) {
+    showToast(`Error: ${e.message}`, 'error');
+    return;
+  }
+  if (!results || !results.length) {
+    showToast('Error: no response from move operation', 'error');
+    return;
+  }
   if (results[0].success) {
     showToast(`✅ Moved to ${destDrive}`, 'success');
-    await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
+    if (analyzerHistory.length > 0) await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
   } else {
-    showToast(`Failed: ${results[0].error}`, 'error');
+    showToast(`❌ Move failed: ${results[0].error || 'unknown error'}`, 'error');
   }
 }
 
