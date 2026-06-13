@@ -261,12 +261,16 @@ async function deleteSelected() {
 
 // Space Analyzer
 async function runAnalyzer() {
-  const dir = state.dir || 'C:\\'
-  if (!dir) { showToast('Select a drive first', 'error'); return; }
-  document.getElementById('analyzer-count').textContent = 'Analyzing...';
-  document.getElementById('analyzer-bars').innerHTML = '<div class="empty-state"><span class="spinner"></span> Calculating folder sizes...</div>';
-  const results = await window.nebula.analyzeSpace(dir);
-  renderAnalyzer(results, dir);
+  const dir = state.dir || 'C:\\';
+  document.getElementById('analyzer-count').textContent = `Analyzing ${dir} ...`;
+  document.getElementById('analyzer-bars').innerHTML = '<div class="empty-state"><span class="spinner"></span> Calculating folder sizes... this may take a minute</div>';
+  try {
+    const results = await window.nebula.analyzeSpace(dir);
+    renderAnalyzer(results, dir);
+  } catch (e) {
+    document.getElementById('analyzer-bars').innerHTML = emptyState('❌', `Error: ${e.message}`);
+    document.getElementById('analyzer-count').textContent = '';
+  }
 }
 
 function renderAnalyzer(results, dir) {
