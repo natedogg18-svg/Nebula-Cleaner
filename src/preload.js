@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('nebula', {
   getDiskInfo: () => ipcRenderer.invoke('get-disk-info'),
   getDrives: () => ipcRenderer.invoke('get-drives'),
   analyzeSpace: (dir) => ipcRenderer.invoke('analyze-space', dir),
+  moveToDrive: (srcPaths, destDir) => ipcRenderer.invoke('move-to-drive', srcPaths, destDir),
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),

@@ -330,6 +330,54 @@ ipcMain.handle('delete-from-bin', async (_, ids) => {
   return { success: true };
 });
 
+// Move files/folders to another drive/location
+ipcMain.handle('move-to-drive', async (_, srcPaths, destDir) => {
+  const results = [];
+  for (const src of srcPaths) {
+    try {
+      if (!fs.existsSync(src)) { results.push({ success: false, path: src, error: 'File not found' }); continue; }
+      const destPath = path.join(destDir, path.basename(src));
+      // If same drive, instant rename
+      try {
+        fs.renameSync(src, destPath);
+      } catch (e) {
+        if (e.code === 'EXDEV') {
+          // Cross-drive: copy then delete
+          await copyRecursive(src, destPath);
+          await deleteRecursive(src);
+        } else throw e;
+      }
+      results.push({ success: true, path: src, dest: destPath });
+    } catch (e) {
+      results.push({ success: false, path: src, error: e.message });
+    }
+  }
+  return results;
+});
+
+async function copyRecursive(src, dest) {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src)) {
+      await new Promise(r => setImmediate(r));
+      await copyRecursive(path.join(src, entry), path.join(dest, entry));
+    }
+  } else {
+    await throttledCopy(src, dest);
+  }
+}
+
+async function deleteRecursive(src) {
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    for (const entry of fs.readdirSync(src)) await deleteRecursive(path.join(src, entry));
+    fs.rmdirSync(src);
+  } else {
+    fs.unlinkSync(src);
+  }
+}
+
 // Space analyzer — top folders by size, async to keep UI responsive
 async function getDirSize(dir, depth = 0) {
   let size = 0;

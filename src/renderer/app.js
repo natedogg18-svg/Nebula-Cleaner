@@ -319,9 +319,43 @@ function renderAnalyzer(results, dir) {
           <div class="analyzer-bar-wrap"><div class="analyzer-bar" style="width:${pct}%"></div></div>
         </div>
         <div class="analyzer-size">${item.sizeFormatted}</div>
+        <button class="btn btn-sm analyzer-move" onclick="showMoveToDrive('${safePath}')" title="Move to another drive">📦 Move</button>
         <button class="btn btn-sm btn-danger analyzer-del" onclick="analyzerMoveToBin('${safePath}', '${item.type}')" title="Move to bin">🗑</button>
       </div>`;
   }).join('');
+}
+
+let pendingMovePath = null;
+
+async function showMoveToDrive(itemPath) {
+  pendingMovePath = itemPath;
+  const drives = await window.nebula.getDrives();
+  const modal = document.getElementById('move-modal');
+  const list = document.getElementById('move-drive-list');
+  list.innerHTML = drives.map(d => `
+    <button class="btn drive-pick-btn" onclick="confirmMoveToDrive('${d.path.replace(/\\/g, '\\\\')}')">
+      💾 ${d.path} <span class="drive-name">${d.label || ''}</span>
+      <span class="drive-free">${d.freeFormatted} free</span>
+    </button>`).join('');
+  modal.classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('move-modal').classList.remove('show');
+  pendingMovePath = null;
+}
+
+async function confirmMoveToDrive(destDrive) {
+  closeModal();
+  if (!pendingMovePath) return;
+  showToast(`⏳ Moving to ${destDrive}... please wait`);
+  const results = await window.nebula.moveToDrive([pendingMovePath], destDrive);
+  if (results[0].success) {
+    showToast(`✅ Moved to ${destDrive}`, 'success');
+    await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
+  } else {
+    showToast(`Failed: ${results[0].error}`, 'error');
+  }
 }
 
 async function analyzerMoveToBin(itemPath, type) {

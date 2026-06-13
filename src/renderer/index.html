@@ -173,6 +173,18 @@
     </main>
   </div>
 
+  <!-- Move to Drive Modal -->
+  <div class="modal-overlay" id="move-modal" onclick="closeModal()">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>📦 Move to Drive</h3>
+        <button class="ctrl-btn close" onclick="closeModal()">×</button>
+      </div>
+      <p class="modal-sub">Select destination drive:</p>
+      <div class="move-drive-list" id="move-drive-list"></div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
