@@ -613,10 +613,11 @@ function closeModal() {
 }
 
 async function confirmMoveToDrive(destDrive) {
+  const srcPath = pendingMovePath;
   closeModal();
-  if (!pendingMovePath) return;
+  if (!srcPath) return;
   showToast(`⏳ Moving to ${destDrive}... please wait`);
-  const results = await window.nebula.moveToDrive([pendingMovePath], destDrive);
+  const results = await window.nebula.moveToDrive([srcPath], destDrive);
   if (results[0].success) {
     showToast(`✅ Moved to ${destDrive}`, 'success');
     await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
