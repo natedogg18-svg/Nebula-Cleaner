@@ -17,6 +17,7 @@
       <span class="app-name">Nebula Cleaner</span>
     </div>
     <div class="titlebar-controls">
+      <button class="ctrl-btn theme-toggle" onclick="toggleTheme()" id="theme-btn" title="Toggle theme">🌙</button>
       <button class="ctrl-btn minimize" onclick="window.nebula.minimize()" title="Minimize">−</button>
       <button class="ctrl-btn maximize" onclick="window.nebula.maximize()" title="Maximize">□</button>
       <button class="ctrl-btn close" onclick="window.nebula.close()" title="Close">×</button>
@@ -40,6 +41,12 @@
         <div class="nav-item" data-tab="junk" onclick="switchTab('junk')">
           <span class="nav-icon">🗑️</span> Junk Files
         </div>
+        <div class="nav-item" data-tab="old-files" onclick="switchTab('old-files')">
+          <span class="nav-icon">🕰</span> Old Files
+        </div>
+        <div class="nav-item" data-tab="empty-folders" onclick="switchTab('empty-folders')">
+          <span class="nav-icon">📂</span> Empty Folders
+        </div>
         <div class="nav-item" data-tab="analyzer" onclick="switchTab('analyzer')">
           <span class="nav-icon">📊</span> Space Analyzer
         </div>
@@ -49,6 +56,9 @@
       </div>
       <div class="sidebar-footer">
         <div class="disk-info" id="disk-info">Loading...</div>
+        <div class="nav-item" data-tab="settings" onclick="switchTab('settings')" style="margin-top:8px">
+          <span class="nav-icon">⚙️</span> Settings
+        </div>
       </div>
     </nav>
 
@@ -108,8 +118,14 @@
         <div class="toolbar">
           <button class="btn btn-sm" onclick="selectAllDuplicates()">Select All Extras</button>
           <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('duplicates')">🗑 Move to Bin</button>
+          <button class="btn btn-sm" onclick="exportTab('duplicates')">📊 Export CSV</button>
           <span class="item-count" id="dup-count"></span>
         </div>
+        <div class="scan-progress-wrap" id="progress-duplicates" style="display:none">
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill-duplicates"></div></div>
+          <span class="progress-label" id="progress-label-duplicates"></span>
+        </div>
+        <input class="search-input" id="search-duplicates" placeholder="🔍 Filter by name or path..." oninput="filterDuplicates()" />
         <div class="file-list" id="duplicate-list"></div>
       </div>
 
@@ -124,8 +140,19 @@
           <button class="btn btn-sm" onclick="rescanLarge()">Rescan</button>
           <button class="btn btn-sm" onclick="selectAll('large-list')">Select All</button>
           <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('large')">🗑 Move to Bin</button>
+          <button class="btn btn-sm" onclick="exportTab('large')">📊 Export CSV</button>
+          <span class="sort-btns">
+            Sort: <button class="btn btn-xs" onclick="sortTab('large','name')">Name</button>
+            <button class="btn btn-xs" onclick="sortTab('large','size')">Size</button>
+            <button class="btn btn-xs" onclick="sortTab('large','date')">Date</button>
+          </span>
           <span class="item-count" id="large-count"></span>
         </div>
+        <div class="scan-progress-wrap" id="progress-large" style="display:none">
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill-large"></div></div>
+          <span class="progress-label" id="progress-label-large"></span>
+        </div>
+        <input class="search-input" id="search-large" placeholder="🔍 Filter by name or path..." oninput="filterLarge()" />
         <div class="file-list" id="large-list"></div>
       </div>
 
@@ -138,9 +165,62 @@
         <div class="toolbar">
           <button class="btn btn-sm" onclick="selectAll('junk-list')">Select All</button>
           <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('junk')">🗑 Move to Bin</button>
+          <button class="btn btn-sm" onclick="exportTab('junk')">📊 Export CSV</button>
+          <span class="sort-btns">
+            Sort: <button class="btn btn-xs" onclick="sortTab('junk','name')">Name</button>
+            <button class="btn btn-xs" onclick="sortTab('junk','size')">Size</button>
+            <button class="btn btn-xs" onclick="sortTab('junk','date')">Date</button>
+          </span>
           <span class="item-count" id="junk-count"></span>
         </div>
+        <div class="scan-progress-wrap" id="progress-junk" style="display:none">
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill-junk"></div></div>
+          <span class="progress-label" id="progress-label-junk"></span>
+        </div>
+        <input class="search-input" id="search-junk" placeholder="🔍 Filter by name or path..." oninput="filterJunk()" />
         <div class="file-list" id="junk-list"></div>
+      </div>
+
+      <!-- Old Files -->
+      <div class="tab-panel" id="tab-old-files">
+        <div class="panel-header">
+          <h1 class="panel-title">🕰 Old Files</h1>
+          <p class="panel-subtitle">Files not modified in 12+ months</p>
+        </div>
+        <div class="toolbar">
+          <label class="size-label">Older than (months): <input type="number" id="old-months" value="12" min="1" max="120" style="width:60px" /></label>
+          <button class="btn btn-sm btn-primary" onclick="runScan('old-files')">🔍 Scan</button>
+          <button class="btn btn-sm" onclick="selectAll('old-files-list')">Select All</button>
+          <button class="btn btn-sm btn-danger" onclick="sendSelectedToBin('old-files')">🗑 Move to Bin</button>
+          <button class="btn btn-sm" onclick="exportTab('old-files')">📊 Export CSV</button>
+          <span class="sort-btns">
+            Sort: <button class="btn btn-xs" onclick="sortTab('old-files','name')">Name</button>
+            <button class="btn btn-xs" onclick="sortTab('old-files','size')">Size</button>
+            <button class="btn btn-xs" onclick="sortTab('old-files','date')">Date</button>
+          </span>
+          <span class="item-count" id="old-files-count"></span>
+        </div>
+        <div class="scan-progress-wrap" id="progress-old-files" style="display:none">
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill-old-files"></div></div>
+          <span class="progress-label" id="progress-label-old-files"></span>
+        </div>
+        <input class="search-input" id="search-old-files" placeholder="🔍 Filter by name or path..." oninput="filterOldFiles()" />
+        <div class="file-list" id="old-files-list"></div>
+      </div>
+
+      <!-- Empty Folders -->
+      <div class="tab-panel" id="tab-empty-folders">
+        <div class="panel-header">
+          <h1 class="panel-title">📂 Empty Folders</h1>
+          <p class="panel-subtitle">Directories with no files inside</p>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-sm btn-primary" onclick="runScan('empty-folders')">🔍 Scan</button>
+          <button class="btn btn-sm" onclick="selectAll('empty-folders-list')">Select All</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteSelectedEmptyFolders()">🗑 Delete Selected</button>
+          <span class="item-count" id="empty-folders-count"></span>
+        </div>
+        <div class="file-list" id="empty-folders-list"></div>
       </div>
 
       <!-- Space Analyzer -->
@@ -152,6 +232,10 @@
         <div class="toolbar">
           <button class="btn btn-sm btn-primary" onclick="runAnalyzer()">🔍 Analyze Drive</button>
           <span class="item-count" id="analyzer-count"></span>
+        </div>
+        <div class="scan-progress-wrap" id="progress-analyzer" style="display:none">
+          <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-fill-analyzer"></div></div>
+          <span class="progress-label" id="progress-label-analyzer"></span>
         </div>
         <div class="analyzer-bars" id="analyzer-bars"></div>
       </div>
@@ -170,6 +254,36 @@
         </div>
         <div class="file-list" id="bin-list"></div>
       </div>
+
+      <!-- Settings -->
+      <div class="tab-panel" id="tab-settings">
+        <div class="panel-header">
+          <h1 class="panel-title">⚙️ Settings</h1>
+          <p class="panel-subtitle">Configure Nebula Cleaner preferences</p>
+        </div>
+        <div class="settings-section">
+          <div class="settings-row">
+            <div class="settings-info">
+              <div class="settings-label">Weekly Scan Reminder</div>
+              <div class="settings-desc">Get notified every 7 days to run a scan</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="schedule-toggle" onchange="saveSchedule()" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-row">
+            <div class="settings-info">
+              <div class="settings-label">Theme</div>
+              <div class="settings-desc">Switch between dark and light mode</div>
+            </div>
+            <button class="btn btn-sm" onclick="toggleTheme()" id="theme-settings-btn">Switch to Light</button>
+          </div>
+          <div class="settings-row">
+            <button class="btn btn-sm btn-primary" onclick="checkScheduleNow()">Test Notification</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -182,6 +296,18 @@
       </div>
       <p class="modal-sub">Select destination drive:</p>
       <div class="move-drive-list" id="move-drive-list"></div>
+    </div>
+  </div>
+
+  <!-- File Preview Modal -->
+  <div class="modal-overlay" id="preview-modal" onclick="closePreviewModal()">
+    <div class="modal preview-modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="preview-title">File Preview</h3>
+        <button class="ctrl-btn close" onclick="closePreviewModal()">×</button>
+      </div>
+      <div id="preview-meta" class="preview-meta"></div>
+      <div id="preview-content" class="preview-content"></div>
     </div>
   </div>
 

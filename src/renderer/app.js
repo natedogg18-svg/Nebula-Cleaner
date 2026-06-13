@@ -4,7 +4,10 @@ const state = {
   duplicates: [],
   largeFiles: [],
   junkFiles: [],
+  oldFiles: [],
+  emptyFolders: [],
   binItems: [],
+  sortState: {},
 };
 
 // Stars
@@ -24,9 +27,11 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`tab-${tab}`).classList.add('active');
-  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  const navEl = document.querySelector(`[data-tab="${tab}"]`);
+  if (navEl) navEl.classList.add('active');
   if (tab === 'bin') loadBin();
   if (tab === 'analyzer') runAnalyzer();
+  if (tab === 'settings') loadSettings();
 }
 
 // Toast
@@ -36,14 +41,50 @@ function showToast(msg, type = '') {
   t.textContent = msg;
   t.className = `toast show ${type}`;
   clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => t.classList.remove('show'), 3000);
+  toastTimeout = setTimeout(() => t.classList.remove('show'), 3500);
 }
 
 // Status
 function setStatus(msg, loading = false) {
   const s = document.getElementById('scan-status');
-  s.innerHTML = loading ? `<span class="spinner"></span>${msg}` : msg;
+  if (s) s.innerHTML = loading ? `<span class="spinner"></span>${msg}` : msg;
 }
+
+// Progress bar
+function showProgress(tabKey, show) {
+  const wrap = document.getElementById(`progress-${tabKey}`);
+  if (wrap) wrap.style.display = show ? 'flex' : 'none';
+}
+
+function updateProgress(tabKey, current, total) {
+  const fill = document.getElementById(`progress-fill-${tabKey}`);
+  const label = document.getElementById(`progress-label-${tabKey}`);
+  if (!fill || !label) return;
+  if (total > 0) {
+    const pct = Math.min(100, Math.round((current / total) * 100));
+    fill.style.width = pct + '%';
+    label.textContent = `${pct}% (${current} / ${total})`;
+  } else {
+    // Indeterminate: animate using current count
+    const pct = Math.min(95, (current % 500) / 5);
+    fill.style.width = pct + '%';
+    label.textContent = `${current} files scanned...`;
+  }
+}
+
+// Listen for progress events from main process
+let _currentProgressTab = null;
+window.nebula.onProgress((data) => {
+  if (!_currentProgressTab) return;
+  const key = _currentProgressTab;
+  if (data.type === 'done') {
+    updateProgress(key, data.current, data.current);
+    setTimeout(() => showProgress(key, false), 800);
+  } else {
+    showProgress(key, true);
+    updateProgress(key, data.current, data.total);
+  }
+});
 
 // Pick directory
 async function pickDirectory() {
@@ -52,7 +93,10 @@ async function pickDirectory() {
     state.dir = dir;
     document.getElementById('dir-input').value = dir;
     setStatus('');
-    ['duplicates','large','junk'].forEach(k => { document.getElementById(`result-${k}`).textContent = '—'; });
+    ['duplicates','large','junk'].forEach(k => {
+      const el = document.getElementById(`result-${k}`);
+      if (el) el.textContent = '—';
+    });
   }
 }
 
@@ -85,27 +129,60 @@ async function runScan(type, silent = false) {
   if (!state.dir) { if (!silent) showToast('Please select a directory first', 'error'); return; }
   try {
     if (type === 'duplicates') {
+      _currentProgressTab = 'duplicates';
+      showProgress('duplicates', true);
       if (!silent) setStatus('Scanning...', true);
       const groups = await window.nebula.scanDuplicates(state.dir);
+      _currentProgressTab = null;
+      showProgress('duplicates', false);
       state.duplicates = groups;
       const total = groups.reduce((s, g) => s + g.length, 0);
-      document.getElementById('result-duplicates').textContent = `${groups.length} groups (${total} files)`;
+      const el = document.getElementById('result-duplicates');
+      if (el) el.textContent = `${groups.length} groups (${total} files)`;
       renderDuplicates();
     } else if (type === 'large') {
+      _currentProgressTab = 'large';
+      showProgress('large', true);
       const minMB = parseInt(document.getElementById('min-size')?.value || 50);
       const files = await window.nebula.scanLargeFiles(state.dir, minMB);
+      _currentProgressTab = null;
+      showProgress('large', false);
       state.largeFiles = files;
-      document.getElementById('result-large').textContent = `${files.length} files`;
+      const el = document.getElementById('result-large');
+      if (el) el.textContent = `${files.length} files`;
       renderLargeFiles();
     } else if (type === 'junk') {
+      _currentProgressTab = 'junk';
+      showProgress('junk', true);
       const files = await window.nebula.scanJunk(state.dir);
+      _currentProgressTab = null;
+      showProgress('junk', false);
       state.junkFiles = files;
-      document.getElementById('result-junk').textContent = `${files.length} files`;
+      const el = document.getElementById('result-junk');
+      if (el) el.textContent = `${files.length} files`;
       renderJunkFiles();
+    } else if (type === 'old-files') {
+      if (!state.dir) { showToast('Please select a directory first', 'error'); return; }
+      _currentProgressTab = 'old-files';
+      showProgress('old-files', true);
+      const months = parseInt(document.getElementById('old-months')?.value || 12);
+      const files = await window.nebula.scanOldFiles(state.dir, months);
+      _currentProgressTab = null;
+      showProgress('old-files', false);
+      state.oldFiles = files;
+      renderOldFiles();
+    } else if (type === 'empty-folders') {
+      if (!state.dir) { showToast('Please select a directory first', 'error'); return; }
+      showToast('Scanning for empty folders...');
+      const folders = await window.nebula.scanEmptyFolders(state.dir);
+      state.emptyFolders = folders;
+      renderEmptyFolders();
     }
     if (!silent) setStatus('');
   } catch (e) {
+    _currentProgressTab = null;
     if (!silent) setStatus(`Error: ${e.message}`);
+    showToast(`Scan error: ${e.message}`, 'error');
   }
 }
 
@@ -113,64 +190,183 @@ async function rescanLarge() {
   await runScan('large');
 }
 
-// Render helpers
-function emptyState(icon, msg) {
-  return `<div class="empty-state"><div class="icon">${icon}</div><div>${msg}</div></div>`;
-}
-
-function fileItem(file, checked = false, badge = '') {
-  const badgeClass = badge === 'Original' ? 'badge-original' : badge === 'Similar' ? 'badge-similar' : 'badge-dupe';
-  const badgeHtml = badge ? `<span class="file-badge ${badgeClass}">${badge}</span>` : '';
-  return `
-    <div class="file-item">
-      <input type="checkbox" ${checked ? 'checked' : ''} data-path="${escHtml(file.path)}" />
-      <div class="file-info">
-        <div class="file-name">${escHtml(file.name)}</div>
-        <div class="file-path">${escHtml(file.path)}</div>
-      </div>
-      ${badgeHtml}
-      <div class="file-size">${file.sizeFormatted}</div>
-    </div>`;
-}
-
+// Escape HTML
 function escHtml(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Empty state
+function emptyState(icon, msg) {
+  return `<div class="empty-state"><div class="icon">${icon}</div><div>${msg}</div></div>`;
+}
+
+// File item HTML (with preview on name click)
+function fileItem(file, checked = false, badge = '', showDate = false) {
+  const badgeClass = badge === 'Original' ? 'badge-original' : badge === 'Similar' ? 'badge-similar' : 'badge-dupe';
+  const badgeHtml = badge ? `<span class="file-badge ${badgeClass}">${badge}</span>` : '';
+  const dateHtml = showDate && file.mtime ? `<div class="badge-date">${new Date(file.mtime).toLocaleDateString()}</div>` : '';
+  const safePath = escHtml(file.path);
+  return `
+    <div class="file-item">
+      <input type="checkbox" ${checked ? 'checked' : ''} data-path="${safePath}" />
+      <div class="file-info">
+        <div class="file-name file-preview-link" onclick="openPreview(${JSON.stringify(file.path)})">${escHtml(file.name)}</div>
+        <div class="file-path">${escHtml(file.path)}</div>
+      </div>
+      ${badgeHtml}
+      ${dateHtml}
+      <div class="file-size">${file.sizeFormatted || ''}</div>
+    </div>`;
+}
+
+// Sort helpers
+function sortFiles(files, key) {
+  const sorted = [...files];
+  if (key === 'name') sorted.sort((a, b) => a.name.localeCompare(b.name));
+  else if (key === 'size') sorted.sort((a, b) => b.size - a.size);
+  else if (key === 'date') sorted.sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
+  return sorted;
+}
+
+function sortTab(tabKey, key) {
+  state.sortState[tabKey] = key;
+  if (tabKey === 'large') renderLargeFiles();
+  else if (tabKey === 'junk') renderJunkFiles();
+  else if (tabKey === 'old-files') renderOldFiles();
+}
+
+// Filter helpers
+function getFilter(id) {
+  const el = document.getElementById(id);
+  return el ? el.value.toLowerCase() : '';
+}
+
+function filterFiles(files, query) {
+  if (!query) return files;
+  return files.filter(f => f.name.toLowerCase().includes(query) || f.path.toLowerCase().includes(query));
+}
+
+// Render duplicates
 function renderDuplicates() {
   const list = document.getElementById('duplicate-list');
-  if (!state.duplicates.length) { list.innerHTML = emptyState('👯', 'No duplicates found'); document.getElementById('dup-count').textContent = ''; return; }
+  const query = getFilter('search-duplicates');
+  if (!state.duplicates.length) {
+    list.innerHTML = emptyState('👯', 'No duplicates found');
+    document.getElementById('dup-count').textContent = '';
+    return;
+  }
   let html = '';
   let totalWaste = 0;
+  let shownGroups = 0;
   state.duplicates.forEach((group, gi) => {
+    const filtered = filterFiles(group, query);
+    if (!filtered.length) return;
+    shownGroups++;
     const waste = group[0].size * (group.length - 1);
     totalWaste += waste;
     const isExact = group[0].matchType === 'exact';
     const label = isExact ? `${group.length} identical files (${group[0].sizeFormatted} each)` : `${group.length} similar files — review before deleting`;
     const icon = isExact ? '🔴 Exact Duplicates' : '🟡 Similar Names';
     html += `<div class="dup-group"><div class="dup-group-header">${icon} · Group ${gi+1} — ${label}</div>`;
-    group.forEach((f, i) => { html += fileItem(f, isExact && i > 0, i === 0 ? 'Original' : isExact ? 'Duplicate' : 'Similar'); });
+    filtered.forEach((f, i) => { html += fileItem(f, isExact && i > 0, i === 0 ? 'Original' : isExact ? 'Duplicate' : 'Similar'); });
     html += '</div>';
   });
-  list.innerHTML = html;
+  list.innerHTML = html || emptyState('🔍', 'No results match filter');
   const wasteGB = (totalWaste / 1e9).toFixed(2);
-  document.getElementById('dup-count').textContent = `${state.duplicates.length} groups · ~${wasteGB} GB recoverable`;
+  document.getElementById('dup-count').textContent = `${shownGroups} groups · ~${wasteGB} GB recoverable`;
 }
 
+function filterDuplicates() { renderDuplicates(); }
+
+// Render large files
 function renderLargeFiles() {
   const list = document.getElementById('large-list');
-  if (!state.largeFiles.length) { list.innerHTML = emptyState('🌍', 'No large files found'); document.getElementById('large-count').textContent = ''; return; }
-  list.innerHTML = state.largeFiles.map(f => fileItem(f)).join('');
-  document.getElementById('large-count').textContent = `${state.largeFiles.length} files`;
+  const query = getFilter('search-large');
+  const sortKey = state.sortState['large'] || 'size';
+  let files = filterFiles(state.largeFiles, query);
+  files = sortFiles(files, sortKey);
+  if (!files.length) {
+    list.innerHTML = emptyState('🌍', 'No large files found');
+    document.getElementById('large-count').textContent = '';
+    return;
+  }
+  list.innerHTML = files.map(f => fileItem(f, false, '', true)).join('');
+  document.getElementById('large-count').textContent = `${files.length} files`;
 }
 
+function filterLarge() { renderLargeFiles(); }
+
+// Render junk files
 function renderJunkFiles() {
   const list = document.getElementById('junk-list');
-  if (!state.junkFiles.length) { list.innerHTML = emptyState('🗑️', 'No junk files found'); document.getElementById('junk-count').textContent = ''; return; }
-  list.innerHTML = state.junkFiles.map(f => fileItem(f)).join('');
-  document.getElementById('junk-count').textContent = `${state.junkFiles.length} files`;
+  const query = getFilter('search-junk');
+  const sortKey = state.sortState['junk'] || 'name';
+  let files = filterFiles(state.junkFiles, query);
+  files = sortFiles(files, sortKey);
+  if (!files.length) {
+    list.innerHTML = emptyState('🗑️', 'No junk files found');
+    document.getElementById('junk-count').textContent = '';
+    return;
+  }
+  list.innerHTML = files.map(f => fileItem(f, false, '', true)).join('');
+  document.getElementById('junk-count').textContent = `${files.length} files`;
 }
 
+function filterJunk() { renderJunkFiles(); }
+
+// Render old files
+function renderOldFiles() {
+  const list = document.getElementById('old-files-list');
+  const query = getFilter('search-old-files');
+  const sortKey = state.sortState['old-files'] || 'date';
+  let files = filterFiles(state.oldFiles, query);
+  files = sortFiles(files, sortKey);
+  if (!files.length) {
+    list.innerHTML = emptyState('🕰', state.oldFiles.length ? 'No results match filter' : 'No old files found — run a scan');
+    document.getElementById('old-files-count').textContent = '';
+    return;
+  }
+  list.innerHTML = files.map(f => fileItem(f, false, '', true)).join('');
+  document.getElementById('old-files-count').textContent = `${files.length} files`;
+}
+
+function filterOldFiles() { renderOldFiles(); }
+
+// Render empty folders
+function renderEmptyFolders() {
+  const list = document.getElementById('empty-folders-list');
+  const folders = state.emptyFolders;
+  if (!folders.length) {
+    list.innerHTML = emptyState('📂', 'No empty folders found');
+    document.getElementById('empty-folders-count').textContent = '';
+    return;
+  }
+  list.innerHTML = folders.map(f => `
+    <div class="file-item">
+      <input type="checkbox" data-path="${escHtml(f.path)}" />
+      <div class="file-info">
+        <div class="file-name">📁 ${escHtml(f.name)}</div>
+        <div class="file-path">${escHtml(f.path)}</div>
+      </div>
+    </div>`).join('');
+  document.getElementById('empty-folders-count').textContent = `${folders.length} folders`;
+}
+
+async function deleteSelectedEmptyFolders() {
+  const checked = [...document.querySelectorAll('#empty-folders-list input[type=checkbox]:checked')];
+  if (!checked.length) { showToast('No folders selected', 'error'); return; }
+  const paths = checked.map(c => c.dataset.path);
+  if (!confirm(`Permanently delete ${paths.length} empty folder(s)? This cannot be undone.`)) return;
+  const results = await window.nebula.deleteEmptyFolders(paths);
+  const ok = results.filter(r => r.success).length;
+  const fail = results.length - ok;
+  showToast(`Deleted ${ok} folder(s)${fail ? ` (${fail} failed)` : ''}`, ok > 0 ? 'success' : 'error');
+  const removedPaths = new Set(results.filter(r => r.success).map(r => r.path));
+  state.emptyFolders = state.emptyFolders.filter(f => !removedPaths.has(f.path));
+  renderEmptyFolders();
+}
+
+// Recycle bin
 async function loadBin() {
   state.binItems = await window.nebula.getBin();
   renderBin();
@@ -178,7 +374,11 @@ async function loadBin() {
 
 function renderBin() {
   const list = document.getElementById('bin-list');
-  if (!state.binItems.length) { list.innerHTML = emptyState('♻️', 'Recycle bin is empty'); document.getElementById('bin-count').textContent = ''; return; }
+  if (!state.binItems.length) {
+    list.innerHTML = emptyState('♻️', 'Recycle bin is empty');
+    document.getElementById('bin-count').textContent = '';
+    return;
+  }
   list.innerHTML = state.binItems.map(item => `
     <div class="file-item">
       <input type="checkbox" data-id="${escHtml(item.id)}" />
@@ -201,15 +401,20 @@ function selectAll(listId) {
 function selectAllDuplicates() {
   document.querySelectorAll('#duplicate-list input[type=checkbox]').forEach(c => {
     const item = c.closest('.file-item');
-    const badge = item.querySelector('.file-badge');
-    // Select everything that isn't marked Original
+    const badge = item ? item.querySelector('.file-badge') : null;
     if (!badge || !badge.classList.contains('badge-original')) c.checked = true;
   });
 }
 
 // Send to bin
 async function sendSelectedToBin(type) {
-  const listId = type === 'duplicates' ? 'duplicate-list' : type === 'large' ? 'large-list' : 'junk-list';
+  const listMap = {
+    duplicates: 'duplicate-list',
+    large: 'large-list',
+    junk: 'junk-list',
+    'old-files': 'old-files-list',
+  };
+  const listId = listMap[type];
   const checked = [...document.querySelectorAll(`#${listId} input[type=checkbox]:checked`)];
   if (!checked.length) { showToast('No files selected', 'error'); return; }
   const paths = checked.map(c => c.dataset.path);
@@ -219,10 +424,8 @@ async function sendSelectedToBin(type) {
   const fail = results.length - ok;
   const firstErr = results.find(r => !r.success);
   const errDetail = firstErr ? ` — ${firstErr.error}` : '';
-  console.error('Bin results:', results.filter(r => !r.success));
   showToast(`Moved ${ok} file(s) to bin${fail ? ` (${fail} failed${errDetail})` : ''}`, ok > 0 ? 'success' : 'error');
 
-  // Remove successfully moved files from state and re-render without rescanning
   const movedPaths = new Set(results.filter(r => r.success).map(r => r.path));
   if (type === 'duplicates') {
     state.duplicates = state.duplicates.map(g => g.filter(f => !movedPaths.has(f.path))).filter(g => g.length > 1);
@@ -233,10 +436,13 @@ async function sendSelectedToBin(type) {
   } else if (type === 'junk') {
     state.junkFiles = state.junkFiles.filter(f => !movedPaths.has(f.path));
     renderJunkFiles();
+  } else if (type === 'old-files') {
+    state.oldFiles = state.oldFiles.filter(f => !movedPaths.has(f.path));
+    renderOldFiles();
   }
 }
 
-// Restore
+// Restore from bin
 async function restoreSelected() {
   const checked = [...document.querySelectorAll('#bin-list input[type=checkbox]:checked')];
   if (!checked.length) { showToast('No files selected', 'error'); return; }
@@ -259,6 +465,67 @@ async function deleteSelected() {
   await loadBin();
 }
 
+// Export CSV
+async function exportTab(type) {
+  let data = [];
+  if (type === 'duplicates') {
+    state.duplicates.forEach(group => {
+      group.forEach(f => data.push({ type: f.matchType || 'duplicate', name: f.name, path: f.path, sizeFormatted: f.sizeFormatted, mtime: f.mtime }));
+    });
+  } else if (type === 'large') {
+    data = state.largeFiles.map(f => ({ type: 'large', name: f.name, path: f.path, sizeFormatted: f.sizeFormatted, mtime: f.mtime }));
+  } else if (type === 'junk') {
+    data = state.junkFiles.map(f => ({ type: 'junk', name: f.name, path: f.path, sizeFormatted: f.sizeFormatted, mtime: f.mtime }));
+  } else if (type === 'old-files') {
+    data = state.oldFiles.map(f => ({ type: 'old', name: f.name, path: f.path, sizeFormatted: f.sizeFormatted, mtime: f.mtime }));
+  }
+  if (!data.length) { showToast('No data to export', 'error'); return; }
+  const res = await window.nebula.exportReport(data, 'csv');
+  if (res.success) showToast(`Exported to ${res.filePath}`, 'success');
+  else if (!res.canceled) showToast(`Export failed: ${res.error}`, 'error');
+}
+
+// File Preview
+async function openPreview(filePath) {
+  const modal = document.getElementById('preview-modal');
+  const title = document.getElementById('preview-title');
+  const meta = document.getElementById('preview-meta');
+  const content = document.getElementById('preview-content');
+
+  title.textContent = 'Loading...';
+  meta.textContent = '';
+  content.innerHTML = '<div class="empty-state"><span class="spinner"></span></div>';
+  modal.classList.add('show');
+
+  const result = await window.nebula.readFilePreview(filePath);
+  title.textContent = result.name || filePath;
+  meta.innerHTML = `<span>Size: ${result.sizeFormatted || ''}</span> <span>Modified: ${result.mtime ? new Date(result.mtime).toLocaleString() : ''}</span> <span class="preview-path">${escHtml(result.path || filePath)}</span>`;
+
+  if (result.type === 'image') {
+    content.innerHTML = `<img class="preview-img" src="${escHtml(result.content)}" alt="${escHtml(result.name || '')}" />`;
+  } else if (result.type === 'text') {
+    content.innerHTML = `<pre class="preview-text">${escHtml(result.content)}</pre>`;
+  } else if (result.type === 'error') {
+    content.innerHTML = emptyState('❌', `Cannot preview: ${result.content || result.error || 'Unknown error'}`);
+  } else {
+    const ext = (result.ext || '').toLowerCase();
+    const isVideo = ['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(ext);
+    const isAudio = ['.mp3', '.wav', '.flac', '.aac', '.ogg'].includes(ext);
+    const icon = isVideo ? '🎬' : isAudio ? '🎵' : '📄';
+    content.innerHTML = `<div class="empty-state">
+      <div class="icon">${icon}</div>
+      <div><strong>${escHtml(result.name || '')}</strong></div>
+      <div>Size: ${result.sizeFormatted || ''}</div>
+      <div>Modified: ${result.mtime ? new Date(result.mtime).toLocaleString() : ''}</div>
+      <div style="margin-top:8px;color:var(--text3);font-size:11px">${escHtml(filePath)}</div>
+    </div>`;
+  }
+}
+
+function closePreviewModal() {
+  document.getElementById('preview-modal').classList.remove('show');
+}
+
 // Space Analyzer
 const analyzerHistory = [];
 
@@ -275,7 +542,7 @@ async function analyzeDir(dir) {
 }
 
 async function runAnalyzer() {
-  const dir = state.dir || 'C:\\';
+  const dir = state.dir || '/';
   analyzerHistory.length = 0;
   analyzerHistory.push(dir);
   await analyzeDir(dir);
@@ -335,7 +602,7 @@ async function showMoveToDrive(itemPath) {
   list.innerHTML = drives.map(d => `
     <button class="btn drive-pick-btn" onclick="confirmMoveToDrive('${d.path.replace(/\\/g, '\\\\')}')">
       💾 ${d.path} <span class="drive-name">${d.label || ''}</span>
-      <span class="drive-free">${d.freeFormatted} free</span>
+      <span class="drive-free">${d.freeFormatted || ''} free</span>
     </button>`).join('');
   modal.classList.add('show');
 }
@@ -363,7 +630,6 @@ async function analyzerMoveToBin(itemPath, type) {
   const results = await window.nebula.moveToBin([itemPath]);
   if (results[0].success) {
     showToast(`Moved to bin!`, 'success');
-    // Refresh current analyzer view
     await analyzeDir(analyzerHistory[analyzerHistory.length - 1]);
   } else {
     showToast(`Failed: ${results[0].error}`, 'error');
@@ -376,7 +642,7 @@ async function loadDrives() {
   const container = document.getElementById('drive-btns');
   if (!drives.length) { container.innerHTML = '<span class="drive-hint">No drives detected</span>'; return; }
   container.innerHTML = drives.map(d => `
-    <button class="btn btn-drive" onclick="selectDrive('${d.path.replace(/\\/g, '\\\\')}', '${d.label}')" title="${d.freeFormatted || ''} free of ${d.sizeFormatted || ''}">
+    <button class="btn btn-drive" onclick="selectDrive('${d.path.replace(/\\/g, '\\\\')}', '${d.label || ''}')" title="${d.freeFormatted || ''} free of ${d.sizeFormatted || ''}">
       💾 ${d.path} ${d.label ? `<span class="drive-name">${d.label}</span>` : ''}
       ${d.size ? `<span class="drive-free">${d.freeFormatted} free</span>` : ''}
     </button>`).join('');
@@ -387,10 +653,55 @@ function selectDrive(drivePath, label) {
   document.getElementById('dir-input').value = drivePath;
   setStatus(`Selected drive: ${drivePath} — click Launch Full Scan`);
   document.querySelectorAll('.btn-drive').forEach(b => b.classList.remove('active-drive'));
-  event.target.closest('.btn-drive').classList.add('active-drive');
+  if (event && event.target) event.target.closest('.btn-drive').classList.add('active-drive');
+}
+
+// Theme toggle
+let isLightTheme = false;
+function toggleTheme() {
+  isLightTheme = !isLightTheme;
+  document.body.classList.toggle('light-theme', isLightTheme);
+  const btn = document.getElementById('theme-btn');
+  const settingsBtn = document.getElementById('theme-settings-btn');
+  if (btn) btn.textContent = isLightTheme ? '☀️' : '🌙';
+  if (settingsBtn) settingsBtn.textContent = isLightTheme ? 'Switch to Dark' : 'Switch to Light';
+  localStorage.setItem('nebula-theme', isLightTheme ? 'light' : 'dark');
+}
+
+function loadTheme() {
+  const saved = localStorage.getItem('nebula-theme');
+  if (saved === 'light') {
+    isLightTheme = true;
+    document.body.classList.add('light-theme');
+    const btn = document.getElementById('theme-btn');
+    if (btn) btn.textContent = '☀️';
+  }
+}
+
+// Settings / schedule
+async function loadSettings() {
+  try {
+    const sched = await window.nebula.getSchedule();
+    const toggle = document.getElementById('schedule-toggle');
+    if (toggle) toggle.checked = !!sched.enabled;
+  } catch (e) {}
+  const settingsBtn = document.getElementById('theme-settings-btn');
+  if (settingsBtn) settingsBtn.textContent = isLightTheme ? 'Switch to Dark' : 'Switch to Light';
+}
+
+async function saveSchedule() {
+  const toggle = document.getElementById('schedule-toggle');
+  await window.nebula.setSchedule({ enabled: toggle ? toggle.checked : false, lastNotified: null });
+  showToast(toggle && toggle.checked ? 'Weekly reminder enabled' : 'Weekly reminder disabled', 'success');
+}
+
+async function checkScheduleNow() {
+  const res = await window.nebula.triggerScheduleCheck();
+  showToast(res.triggered ? 'Notification sent!' : 'Not due yet (less than 7 days since last)', 'success');
 }
 
 // Init
 initStars();
 loadDiskInfo();
 loadDrives();
+loadTheme();
